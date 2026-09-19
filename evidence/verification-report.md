@@ -3,6 +3,11 @@
 Produced at the end of PHASE 4 on 19 Sep 2026, against org `personal_c22c5878e2b772232955`, env `test`.
 Every claim below is backed by a returned value or a connector trace from a live run. Nothing is estimated.
 
+> **Updated 19 Sep, 17:50.** This report was written at the end of the build. Re-verified since (read-only,
+> see the Addendum at the end): the callback target **is now provisioned** and the app event **has fired
+> for real**, so two of the blockers below are closed. It also records two new findings: order-to-row latency
+> is **2.7 to 5.7 minutes**, not under 60 seconds, and both flows' regression suites are **stale**.
+
 ## Verdict
 
 **Both flows are built, published and proven to move real data end to end.** A paid Shopify order becomes
@@ -68,7 +73,7 @@ A and B are not swapped, which was the highest-risk silent defect here since bot
 | T6 — failure surfaces with an alert | partial | Proven for `errorKind: data`: `errors=1`, step `send_buyer_email`, one alert email sent. The connection-outage variant was not run |
 | T7 — recovery without duplicates | partial | The failed record completed with `errors=0` and no duplicate email once the buyer email was supplied. Not proven via a disconnect/reconnect |
 | T8 — config change with no code change | partial | The runtime read is proven in every trace. The edit-and-rerun proof is still owed |
-| T9 — each trigger fires for real | partial | **Schedule: pass.** Run-now `sched-evt_665adc8cf005` produced `exec_e356678864cd`, **completed 200**, 1839 ms, `{skipped:1, errors:0}`. The bound cron then fired unattended: `sched-evt_c448218cb9cc` produced `exec_460b950abab6`, **completed 200**, 2082 ms. **App event: unproven** — `orders/paid` is bound but needs a real order to fire it |
+| T9 — each trigger fires for real | **pass** (updated 17:50) | **Schedule: pass.** Run-now `sched-evt_665adc8cf005` produced `exec_e356678864cd`, **completed 200**, 1839 ms, `{skipped:1, errors:0}`. The bound cron then fired unattended: `sched-evt_c448218cb9cc` produced `exec_460b950abab6`, **completed 200**, 2082 ms, and has kept firing every 5 minutes. **App event: pass.** When this report was first written it was unproven; `orders/paid` has since fired for real three times (`exec_705f59d79ecd`, `exec_00fafff60319`, `exec_0a9d69385da5`), each `completed 200`, `created=1, errors=0` (see the Addendum) |
 
 ## Failures found and fixed
 
@@ -141,3 +146,50 @@ went to the verified Mailjet sender and never to a third party.
 2. Place an order so the `orders/paid` app event fires, closing the other half of T9.
 3. Place a real checkout order to close T1, T3 and the buyer-field mappings.
 4. Run the disconnect/reconnect beat to close T6 and T7 — the alert machinery underneath it is already proven.
+
+---
+
+## Addendum: re-verified 19 Sep, 17:50 PKT (read-only)
+
+Everything above stands as written at the end of the build. This addendum records what changed since and
+what a fresh read of the live platform shows. Evidence: [prompts.md](prompts.md) entries 12 and 13. Nothing
+was written to Fastn, the sheet, Shopify or the deployed app.
+
+### Blockers from the checklist above
+
+| Blocker | Now | Evidence |
+|---|---|---|
+| Provision the callback target | **Closed.** `appBaseUrl` (env `test`) points at the Elastic Beanstalk deployment, org secret `CALLBACK_SECRET` exists, and `defaultCustomerId` is set | `getEnvConfig`, `listSecrets`; `/api/health` 200 |
+| Callbacks reach Sync health | **Closed.** The deployed app's 24 h counts read synced 1 · skipped 49 · failed 3; the one success is #1004's `upsert_row` at 17:30:51 | live `/api/sync-events` |
+| Fire `orders/paid` for real | **Closed.** Fired three times (#1002, #1003, #1004), each `completed 200`, `created=1, errors=0` | `exec_705f59d79ecd`, `exec_00fafff60319`, `exec_0a9d69385da5` |
+| Check the Shopify subscription state | **Closed.** `subscriptionStatus: ACTIVE`, `subscriptionResponse.success: true` | `listAppEventTriggers` |
+| Place a real checkout order | **Still open.** All three new orders are draft orders with no buyer details, so the buyer-field mappings remain unverified | test-results.md |
+| Standard-tier latency | **Promoted from a note to a finding**, see below | test-results.md |
+| Enable the Shopify write-back | Still optional and untouched; 9 scopes, 403 on fulfillment orders | entries 05, 07, 08 |
+
+### New findings
+
+1. **Order-to-row latency misses the PRD target.** Payment to sheet row measured **162 s, 181 s and 343 s**
+   on the three real orders (target: under 60 s). Event delivery is 12–44 s and each run takes 2–5 s; the rest
+   is the standard tier's queue. `executionTier: instant` is the untried fix.
+2. **The regression suites are stale on both flows.** `lastValidation.stale` is `true` on Flow A (dev
+   version 6) and Flow B (dev version 4), reason "the workflow code just changed". The version 4–6 edits
+   (secret name, UUID guard, per-step `eventId`) ran correctly in production but the full attached suite was
+   not re-run and re-saved after them. Per the build skill, an edit is not done until it is.
+3. **Three live open issues, all the designed `data` failure.** #1002, #1003, #1004 fail at
+   `send_buyer_email` on every 5-minute run because the draft orders carry no buyer email. The behaviour is
+   correct (one alert per order, retried each run, never marked Notified) but it means the live Sync health
+   is red until an email is supplied.
+4. **Flow A's event path re-scans instead of using the payload.** On `orders/paid` it lists the 10 most
+   recent orders rather than processing the order in `ctx.input`. Correct today; wasteful, and it can miss an
+   order if 10 newer ones arrive before the run starts.
+5. **Flow B floods Sync health.** It reports `create_fulfillment` *skipped* for every pending row on every
+   run: 23 of the latest 50 events, alongside 23 repeats of the same three failures.
+6. **Exposure.** The deployment is plain HTTP, readable without sign-in, and the callback secret crosses the
+   internet unencrypted on every callback.
+
+### What is proven now
+
+Both triggers fire for real and complete; the schedule ran 22 times unattended (16:00 → 17:45, 0 consecutive
+failures); the app event ran 3 times on real orders; callbacks arrive at the deployed host app and appear in
+Sync health; a data failure surfaces once and keeps retrying without duplicate email.

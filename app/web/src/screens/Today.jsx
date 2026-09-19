@@ -47,7 +47,7 @@ function SetupChecklist({ ws, onLive }) {
       title="Finish setting up Doorstep"
       action={
         <div className="flex flex-wrap gap-3">
-          <Button as={Link} to="/connections" variant="secondary">Open Connections</Button>
+          <Button as={Link} to="/setup" variant="secondary">Continue setup</Button>
           <Button onClick={confirm} disabled={busy || ws.status === 'live'}>{busy ? 'Going live…' : 'Go live'}</Button>
         </div>
       }

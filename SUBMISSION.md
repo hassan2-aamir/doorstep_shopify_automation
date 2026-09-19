@@ -2,10 +2,11 @@
 
 > **Status.** Sections 3–5 are now filled from real Fastn results — every id, count and outcome below came
 > back from a live run and is reproducible from [`evidence/`](evidence/). The remaining `⟦TODO⟧` items are
-> ones only a human can supply (team names, demo video, repo link).
+> ones only a human can supply (team names, demo video link, Fastn workflow links). The deadline moved to
+> 20 Sep, 6 PM; the demo plan is in [`demo/script.md`](demo/script.md).
 
 **Track:** 02, Ecommerce inventory and order sync · **Team:** ⟦TODO: names⟧ · **Links:** demo video
-⟦TODO: Drive link, checked logged out⟧ · repo ⟦TODO⟧ · workflows ⟦TODO: Fastn workflow links⟧
+⟦TODO: Drive link, checked logged out⟧ · repo https://github.com/hassan2-aamir/doorstep_shopify_automation · live app http://doorstep-prod.eba-bf4y27m3.us-east-1.elasticbeanstalk.com/welcome · workflows ⟦TODO: Fastn workflow links⟧
 
 ## 1. Problem and persona
 
@@ -35,13 +36,14 @@ wrong?"*, and every problem links to the screen that fixes it.
 | Fastn Flow A `orders-to-fulfillment` | Shopify order-paid event → upsert one sheet row keyed on order id | Real-time intake; idempotent by design |
 | Fastn Flow B `tracking-to-shopify-and-buyer` | Every 5 min: rows with tracking and not Notified → Shopify fulfillment → one buyer email → Notified | The sheet has no change event, so a bounded poll is the safe pattern |
 | Fastn config + widget | One config (paid only, exclude test orders, sheet tab, status names), one widget "Shopify Orders", User-level scope | Merchants retune rules without a redeploy |
-| Doorstep host app | React + Tailwind, Express, MongoDB (`customers`, `syncEvents`) | Mints embed tokens server-side, receives outcome callbacks, shows Sync health |
+| Doorstep host app | React + Tailwind, Express, MongoDB (`customers`, `syncEvents`) | Mints embed tokens server-side, receives outcome callbacks, shows Sync health. Includes a public landing page (`/welcome`) and a three-step setup (`/setup`: Store, Sheet, Go live) |
+| AWS deployment | Elastic Beanstalk (Node 22, single instance) behind scripts in [`deploy/`](deploy/): build, ship, smoke-test, roll back, provision, tear down | Reproducible: one command ships the app, nine read-only checks verify it, and the previous version is one command away |
 
 **Trigger actually used for Flow A:** the Shopify **app event `orders/paid`** (trigger
 `99102bca-8259-461c-b0bb-b3c32c5d3f50`). It exists on the connector, so neither webhook nor poll fallback
 was needed. Flow B runs on a **5-minute schedule** (`72d331d9-26c3-49d0-962c-e33564b0892c`, cron
 `*/5 * * * *`, Asia/Karachi) because a Google Sheet emits no change event — a bounded poll is the safe
-pattern. That schedule is armed and has fired unattended.
+pattern. That schedule is armed and has fired unattended every 5 minutes since 16:00 PKT (22 runs, 0 consecutive failures at the last read). The app event has fired for real three times on live orders #1002, #1003 and #1004 (`exec_705f59d79ecd`, `exec_00fafff60319`, `exec_0a9d69385da5`), each completed 200, and its subscription reads `ACTIVE`.
 
 **Shopify fulfillment write-back: the PRD fallback was taken.** The Shopify connection carries only 9 OAuth
 scopes and returns **403** on fulfillment orders; all six `*_fulfillment_orders` scopes are missing, and
@@ -60,7 +62,7 @@ widget `wgt_d1f67a4d76b3` ("Shopify Orders", both flows, both triggers, config l
 | Duplicate rows | Upsert keyed on the Shopify order id; an unchanged record skips | **T2 pass** — replay returned `skipped=1`, one data row, cells unchanged |
 | Duplicate buyer emails | State key `notify:{customerId}:{orderId}` written **after the send, before the sheet update**, so a failed sheet write can never cause a second email | **T5 pass** — second run `skipped=1` with **no `sendEmail` in the trace**, `notified_at` unchanged |
 | Retries | 3 attempts, exponential backoff (2 s initial, ×2, 30 s cap) on both flows | Set at `createWorkflow`, visible in each workflow readback |
-| Silent failures | Every record reports to `/api/sync-events`; failures carry step + `errorKind`; one alert email per failing record | **Partly proven** — a real failure classified `errorKind: data` at step `send_buyer_email` sent exactly one alert. The callback target is unprovisioned, so Sync health is still empty |
+| Silent failures | Every record reports to `/api/sync-events`; failures carry step + `errorKind`; one alert email per failing record | **Proven for the data-failure path** — a real failure classified `errorKind: data` at step `send_buyer_email` sent exactly one alert, and callbacks now reach the deployed host app: Sync health shows the three live failures (#1002 to #1004, no buyer email) as open issues. The connection-outage variant was not run |
 | Duplicate callbacks | Unique `eventId`: a redelivered callback returns 200 and changes nothing | API tests + N5 ✅ |
 | Retry noise | Failed counts distinct (order, workflow) pairs, so 3 attempts read as 1 broken order | API tests ✅ |
 | Recovery | Issues close themselves when a later run succeeds | N4 ✅; the failed record completed with `errors=0` and **no duplicate email** once the buyer email was supplied |
@@ -117,13 +119,18 @@ per BUILD step 3.
 
 ## 6. Limitations and next steps
 
-- The demo identifies the merchant by URL; real sign-in, onboarding and a Rules tab were cut for time.
+- The demo identifies the merchant by URL (no sign-in) and the deployment is plain HTTP, so the callback secret
+  travels unencrypted; real sign-in and TLS (CloudFront or a domain with a certificate) are the first
+  post-hackathon work. `/setup` guides the one demo workspace and does not create new merchants; on a live
+  workspace it is a read-only walkthrough. The Rules tab was cut.
 - Connection cards show only what callbacks prove until we confirm whether the widget reports connection status.
-- **The callback target is not yet provisioned** (`appBaseUrl` env config + `callbackSecret` secret), so the
-  flows run correctly but Sync health has no data. They degrade rather than fail — proven live.
-- **The buyer-field mappings are written but unverified.** The dev store only order is a draft with
-  `customer`, `shipping_address` and `billing_address` all null, so those paths need a real checkout order.
+- **Order-to-row latency is minutes, not seconds.** Measured on three real `orders/paid` deliveries, payment to
+  sheet row took **162 s, 181 s and 343 s** (the PRD target was under 60 s). The event reaches Fastn in
+  12–44 s and each run takes 2–5 s; the rest is the standard execution tier queue. Moving both flows to the
+  `instant` tier is the fix and has not been applied.
+- **The buyer-field mappings are written but unverified.** All four dev-store orders are draft orders created
+  without buyer details (#1004 has a customer stub with no email or name and an address holding only the
+  country), so those paths still need an order with a real customer. That is also why three live orders sit
+  in Sync health as "no buyer email".
 - **No Shopify write-back**, per the scope gap in section 3.
-- Standard-tier executions queue for about two minutes before running; `instant` tier would make the demo
-  feel live.
 - Next: restock inventory and notify the buyer on cancel or full refund; a second buyer channel (WhatsApp).

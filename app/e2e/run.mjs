@@ -330,6 +330,117 @@ try {
     await page.getByRole('link', { name: 'Go to Today' }).click();
     await page.waitForURL('**/today');
   });
+
+  // ---------- Landing and onboarding (Tier 3) ----------
+  const workspace = () => db.collection('customers').findOne({ _id: customer._id });
+  const noHScroll = async (p, route) => {
+    await p.goto(`${BASE}${route}`);
+    await p.locator('h1').waitFor();
+    const { sw, cw } = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+    assert(sw <= cw, `${route}: horizontal scroll (${sw} > ${cw})`);
+  };
+
+  await reset('connecting');
+  await db.collection('customers').updateOne({ _id: customer._id }, { $set: { shopDomain: null, sheetUrl: null } });
+
+  await check('L1', 'Landing page: one h1, CTAs to Setup and the live dashboard, usable at 360 px', async () => {
+    const lp = await desktop.newPage();
+    await lp.goto(`${BASE}/welcome?customer=${CUSTOMER}`);
+    await lp.getByRole('heading', { level: 1, name: /Paid orders reach the doorstep/ }).waitFor();
+    assert(await lp.locator('h1').count() === 1, 'landing must have exactly one h1');
+    await shot('11-landing.png', lp);
+    const mobile = await browser.newContext({ viewport: { width: 360, height: 740 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
+    const mp = await mobile.newPage();
+    await noHScroll(mp, `/welcome?customer=${CUSTOMER}`);
+    await shot('12-landing-mobile.png', mp);
+    await mobile.close();
+    await lp.getByRole('link', { name: /Set up your store/ }).first().click();
+    await lp.waitForURL('**/setup');
+    await lp.close();
+    return 'h1, CTA to /setup, no h-scroll at 360 px';
+  });
+
+  await check('L2', "'/' sends a half-set-up workspace to Setup", async () => {
+    await page.goto(`${BASE}/?customer=${CUSTOMER}`);
+    await page.waitForURL('**/setup');
+    await page.getByRole('heading', { name: 'Connect your Shopify store' }).waitFor();
+  });
+
+  await check('L3', 'Setup: validates each step, saves Store and Sheet, Go live reaches Today', async () => {
+    const sp = await desktop.newPage();
+    await sp.goto(`${BASE}/setup?customer=${CUSTOMER}`);
+    await sp.getByRole('heading', { name: 'Connect your Shopify store' }).waitFor();
+    await sp.getByRole('button', { name: /Store connected, continue/ }).click();
+    await sp.getByRole('alert').filter({ hasText: 'your-store.myshopify.com' }).waitFor();
+    assert(await sp.getByLabel('Store address').getAttribute('aria-invalid') === 'true', 'store field not marked invalid');
+    await sp.getByLabel('Store address').fill('https://Test-Store.myshopify.com/admin');
+    await sp.frameLocator('iframe').getByText('Mock Fastn widget').waitFor();
+    await sp.evaluate(() => window.scrollTo(0, 0));
+    await shot('13-setup-store.png', sp);
+    await sp.getByRole('button', { name: /Store connected, continue/ }).click();
+    await sp.waitForURL(/step=sheet/);
+    await sp.getByRole('heading', { name: 'Connect your fulfillment sheet' }).waitFor();
+    assert((await workspace()).shopDomain === 'test-store.myshopify.com', 'store address was not normalised and saved');
+    await sp.getByLabel('Fulfillment sheet link').fill('not a link');
+    await sp.getByRole('button', { name: /Sheet connected, continue/ }).click();
+    await sp.getByRole('alert').filter({ hasText: 'https://docs.google.com/spreadsheets/d/' }).waitFor();
+    await sp.getByLabel('Fulfillment sheet link').fill('https://docs.google.com/spreadsheets/d/abc123_-XYZ/edit');
+    await sp.getByText('The 12 column headers the sheet needs').click();
+    await sp.evaluate(() => window.scrollTo(0, 0));
+    await shot('14-setup-sheet.png', sp);
+    await sp.getByRole('button', { name: /Sheet connected, continue/ }).click();
+    await sp.getByRole('heading', { name: 'Check and go live' }).waitFor();
+    await sp.getByText('test-store.myshopify.com').waitFor();
+    await sp.evaluate(() => window.scrollTo(0, 0));
+    await shot('15-setup-confirm.png', sp);
+    await sp.getByRole('button', { name: 'Go live' }).click();
+    await sp.waitForURL('**/today');
+    const ws = await workspace();
+    assert(ws.status === 'live' && ws.sheetUrl.endsWith('abc123_-XYZ/edit'), `status ${ws.status}`);
+    await sp.close();
+    return 'saved, normalised, live';
+  });
+
+  await check('L4', 'Setup on a live workspace is a read-only walkthrough', async () => {
+    const before = await workspace();
+    const sp = await desktop.newPage();
+    await sp.goto(`${BASE}/setup?customer=${CUSTOMER}`);
+    await sp.getByText('Your workspace is already live').waitFor();
+    await sp.getByLabel('Store address').fill('other-store.myshopify.com');
+    await sp.getByRole('button', { name: /Store connected, continue/ }).click();
+    await sp.waitForURL(/step=sheet/);
+    const after = await workspace();
+    assert(after.shopDomain === before.shopDomain && after.sheetUrl === before.sheetUrl, 'walkthrough changed the workspace');
+    await sp.goto(`${BASE}/setup?step=confirm&customer=${CUSTOMER}`);
+    await sp.getByRole('button', { name: 'Back to Today' }).click();
+    await sp.waitForURL('**/today');
+    await sp.close();
+  });
+
+  await check('L5', 'Setup usable at 360 px on every step', async () => {
+    const mobile = await browser.newContext({ viewport: { width: 360, height: 740 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
+    const mp = await mobile.newPage();
+    for (const step of ['store', 'sheet', 'confirm']) await noHScroll(mp, `/setup?step=${step}&customer=${CUSTOMER}`);
+    await mp.goto(`${BASE}/setup?step=store&customer=${CUSTOMER}`);
+    await shot('16-setup-mobile.png', mp);
+    await mobile.close();
+  });
+
+  await check('L6', 'Landing and Setup have no obvious accessibility misses (names, landmarks, contrast tokens in use)', async () => {
+    const ap = await desktop.newPage();
+    for (const route of ['/welcome', '/setup']) {
+      await ap.goto(`${BASE}${route}?customer=${CUSTOMER}`);
+      await ap.locator('h1').waitFor();
+      const r = await ap.evaluate(() => ({
+        main: document.querySelectorAll('main').length,
+        unnamed: [...document.querySelectorAll('a,button')].filter((e) => !(e.textContent || '').trim() && !e.getAttribute('aria-label')).length,
+        imgNoAlt: [...document.querySelectorAll('img')].filter((i) => !i.hasAttribute('alt')).length,
+        lang: document.documentElement.lang,
+      }));
+      assert(r.main === 1 && r.unnamed === 0 && r.imgNoAlt === 0 && r.lang === 'en', `${route}: ${JSON.stringify(r)}`);
+    }
+    await ap.close();
+  });
 } finally {
   await browser.close();
   server.kill();

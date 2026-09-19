@@ -1,7 +1,7 @@
 # Doorstep
 
 **Order-to-doorstep autopilot for small Shopify merchants.** Paid orders land in the supplier's Google
-Sheet within a minute. When the supplier types a tracking number, it goes back to Shopify and to the
+Sheet in a few minutes (measured 2.7 to 5.7 minutes on Fastn's standard execution tier). When the supplier types a tracking number, it goes back to Shopify and to the
 buyer. Every failure shows up in plain words with a one-tap fix instead of disappearing.
 
 Built on [Fastn](https://fastn.ai) for Build with Fastn, Track 02 (Ecommerce inventory and order sync).
@@ -9,7 +9,9 @@ Built on [Fastn](https://fastn.ai) for Build with Fastn, Track 02 (Ecommerce inv
 | Part | What it is | Where |
 |---|---|---|
 | Fastn flows | `orders-to-fulfillment` (event) and `tracking-to-shopify-and-buyer` (every 5 min), built through the Fastn MCP gateway | Fastn workspace; evidence in [`evidence/`](evidence/) |
-| Host app | React + Tailwind control tower (Today, Orders, Sync health, Connections) + Express API + MongoDB | [`app/`](app/) |
+| Host app | React + Tailwind control tower (Today, Orders, Sync health, Connections), a public landing page (`/welcome`), a three-step setup (`/setup`), and an Express API on MongoDB | [`app/`](app/) |
+| Deployment | AWS Elastic Beanstalk (Node 22, single instance) with zero-dependency scripts to build, ship, verify and roll back | [`deploy/`](deploy/) |
+| Demo | The 2-minute video script, shot list, voice-over and a preflight check | [`demo/`](demo/) |
 | Design system | Flat, block-based tokens, contrast-audited in both themes | [`design/`](design/) |
 | Specs | PRD, TRD, App flow, Backend schema | [`docs/`](docs/) |
 | Plan and tracker | Step-by-step plan and what's done | [`plan.md`](plan.md), [`todo.md`](todo.md) |
@@ -34,7 +36,8 @@ mints embed tokens on the server, receives the flows' outcome callbacks, and sho
 - MongoDB 6+ (local `mongod` or an Atlas free cluster)
 - A Fastn workspace with the hackathon upgrade, one customer created (Settings → Customers), and an API key
 - A Shopify dev store, a Google Sheet set up per [`sheet/README.md`](sheet/README.md), and an email connector
-- ngrok (or any tunnel) so Fastn's runners can reach the callback URL
+- Fastn's runners must reach the callback URL: deploy to AWS (below), or use a tunnel such as ngrok while developing
+- To deploy: the AWS CLI v2, signed in (`aws configure`)
 
 ## Setup
 
@@ -55,8 +58,10 @@ npm run build                   # the API serves app/web/dist
 # 3. Run
 cd ../server
 npm start                       # http://localhost:4000
-npm run tunnel                  # public URL for Fastn callbacks (ngrok)
+npm run tunnel                  # optional: public URL for Fastn callbacks while developing (ngrok)
 ```
+
+Open `/welcome` for the landing page, `/setup` for the guided setup, `/today` for the control tower.
 
 For UI development, run `npm run dev` in `app/web` (Vite on :5173, proxies `/api` to :4000).
 
@@ -70,8 +75,22 @@ For UI development, run `npm run dev` in `app/web` (Vite on :5173, proxies `/api
 | `FASTN_ORG_ID` | Leave empty: the token API treats `x-org-id` as a customer org, not yours |
 | `FASTN_USER_LEVEL` | `true` adds `tenant-id` to the widget URL (User-level scope) |
 
-On the Fastn side, set `fastn.envConfig.appBaseUrl` to the tunnel URL and `fastn.secrets.callbackSecret`
+On the Fastn side, set `fastn.envConfig.appBaseUrl` to the deployed (or tunnel) URL and `fastn.secrets.callbackSecret`
 to the same secret (prompt P3 in [`evidence/prompts.md`](evidence/prompts.md)).
+
+## Deploying to AWS
+
+The live environment is Elastic Beanstalk (`doorstep-prod`, `us-east-1`). From [`deploy/`](deploy/):
+
+```bash
+node deploy.mjs --dry-run   # build the bundle, check the environment, change nothing
+node deploy.mjs             # build, upload, deploy, wait, smoke-test
+node deploy.mjs --rollback <version>
+node smoke.mjs              # nine read-only checks against the live URL
+```
+
+Everything else (first-time setup, variables and secrets, Atlas access, HTTPS, teardown) is in
+[`deploy/README.md`](deploy/README.md).
 
 ## Callback contract
 
@@ -107,7 +126,8 @@ This is for walking through the screens only. It never stands in for the live ac
 
 ```bash
 cd app/server && npm test                   # 26 API tests against a throwaway MongoDB database
-cd app/e2e && npm install && npm test       # N1–N7 in local Chrome/Edge (needs the API on :4000 + a build)
+cd app/e2e && npm install && npm test       # N1–N7, plus landing and setup checks, in local Chrome/Edge (needs a web build; E1 also needs an unconfigured API on UNCONFIGURED_BASE)
+cd deploy && npm test                       # zip writer, bundle contents, argument parsing
 node design/check-contrast.cjs design/tokens.css   # WCAG audit of every token pair, both themes
 ```
 
@@ -127,4 +147,6 @@ Results: [`evidence/nav-test-results.md`](evidence/nav-test-results.md), screens
 - The demo identifies the merchant with `?customer=` / `DEMO_CUSTOMER_ID`. Production needs real sign-in (Tier 3, cut).
 - Connection cards only report what callbacks prove, because the widget isn't known to post connection status to the page (open question).
 - `syncEvents` expire after 30 days; Fastn's execution history remains the source of truth.
-- Welcome, Setup stepper and Rules tab (Tier 3) were cut for time.
+- `/setup` guides Store, Sheet and Go live for the one workspace the demo serves. It does not create a new merchant or Fastn customer: sign-up needs real sign-in, which is not built. On a live workspace `/setup` is a read-only walkthrough.
+- The Rules tab (Tier 3) was cut.
+- The deployment is plain HTTP with the demo-customer fallback; see [`deploy/README.md`](deploy/README.md#https).

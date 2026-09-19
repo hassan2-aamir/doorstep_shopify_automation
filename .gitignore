@@ -5,3 +5,7 @@ dist/
 .DS_Store
 # test-run screenshots are regenerated; curated evidence lives in evidence/screenshots
 app/web/test-results/
+
+# deployment build output and production variables (secrets)
+deploy/.build/
+deploy/.env.production

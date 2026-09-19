@@ -300,3 +300,51 @@ minutes and never completed — recorded as a blocker rather than shrugged off; 
 
 **Verification report** written to [verification-report.md](verification-report.md).
 **Screenshot:** screenshots/13-flow-b-email.png, 14-sheet-notified.png, 15-triggers.png (to capture)
+
+### 12 · 16:10–17:45 · other computer · Deployment and callback wiring (RECONSTRUCTED, prompt text not preserved)
+**Prompt**
+> Not logged at the time. Reconstructed on 19 Sep at 17:50 by reading the platform back, so the wording that produced these changes is unknown. Treat this entry as a description of platform state, not as a transcript.
+
+**Changes found on the platform** (all by the org owner `fb090b4e-…`), times in PKT:
+
+| When | What | Read back with |
+|---|---|---|
+| 16:23 | Env config `appBaseUrl` (env `test`) set to `http://doorstep-prod.eba-bf4y27m3.us-east-1.elasticbeanstalk.com`, so the host app is now deployed on **AWS Elastic Beanstalk** instead of behind a tunnel | `getEnvConfig`, `listEnvironmentConfigs` |
+| 16:23–16:26 | Flow A published as versions 4, 5, 6 (`wv_38906739af07` +190 bytes, `wv_60c13ad42df0` −78, `wv_1e526dc20f08` +693) | `listWorkflowVersions` |
+| 16:24 | Org secret `CALLBACK_SECRET` created (`sec_61b3beb3d241`) | `listSecrets` |
+| 16:26 | Env config `defaultCustomerId` (env `test`) = `0b55acb5-45f5-4ff1-9ba9-6fa3070becb2` | `listEnvironmentConfigs` |
+| 16:28 | Flow B dev version 4 published | `listWorkflows` |
+| 16:44 | Commit `36dac6d`: `crossOriginOpenerPolicy: false` in `app.js`, so the Fastn widget's OAuth popup keeps `window.opener` (helmet's default severed it) | `git show` |
+
+What the code now live in Fastn does differently (from the workflow source, which carries its own comments): the secret is read as `CALLBACK_SECRET` (UPPER_SNAKE; the earlier camelCase name could never resolve); `customerId` is accepted only if it is a real UUID and otherwise falls back to `defaultCustomerId` (a triggered run carries the org id, which the receiver rejects); and each callback `eventId` is unique per step (a shared id made the receiver drop the second event of a run as a duplicate, which lost a FAILURE).
+
+**Not evidenced:** the prompts and tool calls behind these edits, and whether the regression suite was re-run after them. Both flows still show `lastValidation.stale: true` with the reason "the workflow code just changed".
+**Screenshot:** none captured.
+
+### 13 · 17:45–17:55 · session 3 · Re-verify the whole system after the other computer's work (read-only)
+**Prompt**
+> continue. I did a lot of work from another computer, so see where we are, then lets continue.
+
+**MCP tools invoked:** `skill {"slug":"gateway"}`, `listWorkflows`, `listWorkflowExecutions`, `listSecrets`, `getEnvConfig`, `listEnvironmentConfigs`, `listAppEventTriggers`, `listSchedulers`, `getWidget`, `listWorkflowVersions`, `runWorkflowCode` (one read-only sheet read). Nothing was written to Fastn, the sheet, Shopify or the deployed app.
+
+**Result (all read back, not assumed):**
+- **Both flows published and enabled:** Flow A `wf_9406750cbc34` dev version 6, Flow B `wf_a51624da9db1` dev version 4, config `cfg_910772de96ce` linked, widget `wgt_d1f67a4d76b3` active with both flows and both triggers.
+- **Schedule trigger:** `ACTIVE`, cron `*/5 * * * *`, `consecutiveFailures: 0`, `lastRunAt` 17:45:00 PKT, next 17:50. The newest page of executions holds 22 Flow B runs, **all carrying the schedule trigger id**, 16:00:01 → 17:45:00, 21 completed and 1 queued.
+- **App-event trigger `orders/paid`: `subscriptionStatus: ACTIVE`** (`subscriptionResponse.success: true`). The earlier `registered: false` concern is resolved.
+- **T9's app-event half is now proven.** `orders/paid` fired for real three times, each `completed 200` with `created: 1, errors: 0` and Shopify's own headers on the run (`x-shopify-topic: orders/paid`, `x-fastn-trigger-id: 99102bca-…`):
+
+| Order | Execution | Fastn event id | Shopify triggered (UTC) | Flow A version |
+|---|---|---|---|---|
+| #1002 `7341202768160` | `exec_705f59d79ecd` | `evt_faf99c058aa8418f` | 10:56:56 | 3 |
+| #1003 `7341206176032` | `exec_00fafff60319` | `evt_263e222aa74e435c` | 10:59:19 | 3 |
+| #1004 `7341330694432` | `exec_0a9d69385da5` | `evt_b98426c737fa448e` | 12:27:54 | 6 |
+
+- **Measured order-to-row latency (PRD target: under 60 s): NOT MET.** The event reaches Fastn in 12–44 s, then the run waits in the standard-tier queue (started 2.0, 2.7 and 5.0 min after creation). Trigger to completed: **162 s (#1002), 181 s (#1004), 343 s (#1003)**. Each run itself takes only 2.1–4.6 s, so `executionTier: instant` is the fix; it has not been applied.
+- **The callback path works end to end.** The deployed app answers `/api/health` 200 and `/api/workspace` with `status: live`; its 24 h counts read **synced 1 · skipped 43 · failed 3** at 17:44, and skipped had grown to 49 by 17:55 (it rises with every 5-minute run). The single synced event is #1004's `orders-to-fulfillment upsert_row` at 17:30:51 PKT, confirmed from the event feed; #1002 and #1003 ran on version 3, before the callback target existed, so they never reported.
+- **3 open issues in Sync health, all the designed `data` failure:** #1002, #1003, #1004, step `send_buyer_email`, "This order has no buyer email". Each Flow B run retries them and re-reports; the state-key guard keeps it to one alert email per order. They stay open until a buyer email exists in column E.
+- **Why there is no buyer email:** all three orders are `source_name: shopify_draft_order`, gateway `manual`. #1002 and #1003 have `customer: null`. #1004 has a customer stub (`state: disabled`) with no email, name or phone, and a shipping address holding only the country. The sheet shows the same: rows 3–5 have tracking + carrier typed but no buyer name, email or phone, and #1004's address cell reads only "United States". **This does not show that Shopify hides buyer data from this app**; the orders were created without any. It stays untested until an order is created with a customer email and address.
+- **Noise:** Flow B reports a `create_fulfillment` *skipped* event for every pending row on every run. In the latest 50 events that is 23 skipped `create_fulfillment` plus 23 repeated failures for the same 3 orders, so it inflates the Skipped counter and buries real events.
+- **Flow A's event path is not single-record.** On `orders/paid` the run gets the order as `ctx.input`, but the code only honours `input.order` / `input.orderId`, so it falls through to the "recent scan" branch and re-lists the store's 10 most recent orders. That is why #1004's run returned `created: 1, skipped: 3`. The result is correct today, but each event pays for a full scan, and it would miss an order if 10 newer ones arrived before the run started.
+- **Regression gate:** both flows report `lastValidation.stale: true`, so the suite has not been re-run since the version 4–6 edits.
+- **Exposure:** the deployment is plain HTTP. Sync health is readable without sign-in (the server falls back to the demo customer), and the callback secret crosses the internet unencrypted on every callback.
+**Screenshot:** screenshots/16-fastn-triggers-and-executions.png (to capture)

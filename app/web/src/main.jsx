@@ -1,10 +1,14 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import './index.css';
 import { WorkspaceProvider } from './context/WorkspaceContext.jsx';
 import { ToastProvider } from './context/ToastContext.jsx';
 import { AppShell } from './components/AppShell.jsx';
+import { PublicShell } from './components/PublicShell.jsx';
+import { Home } from './screens/Home.jsx';
+import { Welcome } from './screens/Welcome.jsx';
+import { Setup } from './screens/Setup.jsx';
 import { Today } from './screens/Today.jsx';
 import { SyncHealth } from './screens/SyncHealth.jsx';
 import { Connections } from './screens/Connections.jsx';
@@ -24,8 +28,12 @@ createRoot(document.getElementById('root')).render(
       <ToastProvider>
         <WorkspaceProvider>
           <Routes>
+            <Route element={<PublicShell />}>
+              <Route path="welcome" element={<Welcome />} />
+              <Route path="setup" element={<Setup />} />
+            </Route>
             <Route element={<AppShell />}>
-              <Route index element={<Navigate to="/today" replace />} />
+              <Route index element={<Home />} />
               <Route path="today" element={<Today />} />
               <Route path="orders" element={<Orders />}>
                 <Route path=":orderId" element={<OrderDrawer />} />

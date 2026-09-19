@@ -6,8 +6,12 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started · 👤 needs a human (b
 
 > **DECISION TAKEN 14:58 (Shopify fulfillment write-back):** the PRD fallback. Three attempts (entries 05, 07, 08) left the connection on OAuth with 9 scopes and a 403 on fulfillment orders, and the plan's 30-minute A4 decision gate expired at entry 08. Flow B therefore emails the buyer and sets the sheet status, with **no Shopify write-back**. It is built behind a config boolean `shopifyWriteBack` (default false), so entering the custom-app token under the API Key method later flips it on with no code change. Kickoff rewritten as **P2-R** in evidence/prompts.md.
 >
-> **Track A unblocked (12:35):** the project `.mcp.json` server (`mcp__fastn__*`) is authenticated and
-> P0 passed in the VS Code session. Continue with P1 onward from [evidence/prompts.md](evidence/prompts.md).
+> **STATUS 17:55, read back from the live platform (evidence entry 13).** Both flows are live: the cron has fired
+> unattended every 5 min since 16:00 with 0 failures, `orders/paid` has fired for real 3 times (subscription
+> `ACTIVE`), and callbacks reach the host app deployed on AWS Elastic Beanstalk. **Deadline moved: submission is now due Sun 20 Sep, 18:00 PKT** (extended by
+> the organisers, so the earlier 3:30/4:30 PM worry is void). See **Phase 2** below. Open: payment-to-row latency
+> measured 162–343 s against a PRD target of 60 s; both regression suites are stale; three live "no buyer email"
+> issues; buyer-data mappings unverified. See **State at 17:55** at the bottom.
 
 ## Step 0. Prerequisites
 
@@ -18,9 +22,9 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started · 👤 needs a human (b
 | 0.3 | Shopify dev store with test products + test payment | A | ✅ | Ready per team |
 | 0.4 | Fastn Billing upgrade confirmed + one customer created, UUID noted | A | ✅ | Customer `0b55acb5-45f5-4ff1-9ba9-6fa3070becb2`; API key confirmed limited to this customer; app re-seeded; real embed token minted and the Fastn widget renders in Connections ([screenshot](evidence/screenshots/app/10-connections-real-widget.png)); list is empty until A creates the "Shopify Orders" widget. Billing: free plan, 50 credits (ask mentor about the upgrade) |
 | 0.5 | `gateway` skill, `whoami`, skill version check via MCP | A | ✅ | P0 logged as entry 01. Org `personal_c22c5878e2b772232955`, owner, env `test`. Skills current: gateway v12, integration_builder v21, workflow_verifier v6, connector_builder v2, unified_api v2. 📸 still to capture |
-| 0.6 | Shopify, Sheets, email connections ACTIVE via `get_connect_url` | A | ✅ | All three proven with real read-only calls (entry 05): Sheets tab `Fulfillment` + 12 headers read back; Mailjet valid, sender Active; Shopify readable. **But Shopify lacks the fulfillment-order scopes (403), so Flow B cannot create a Shopify fulfillment. Decision needed, see banner** |
+| 0.6 | Shopify, Sheets, email connections ACTIVE via `get_connect_url` | A | ✅ | All three proven with real read-only calls (entry 05): Sheets tab `Fulfillment` + 12 headers read back; Mailjet valid, sender Active; Shopify readable. **But Shopify lacks the fulfillment-order scopes (403), so Flow B cannot create a Shopify fulfillment. Decision taken 14:58: the PRD fallback (see the first banner)** |
 | 0.7 | MongoDB with validators + indexes | B | ✅ | **Now Atlas** (`smartride.ik9q5`), re-seeded customer `6aae627970768d336523f41a`. Was local db `doorstep`; `npm run init-db` (validators + 6 indexes); demo customer seeded with a **placeholder** UUID, so re-seed with the real one |
-| 0.8 | Public tunnel + `CALLBACK_SECRET` | B | ⛔ | Secret generated in `app/server/.env`; `npm run tunnel` ready (ngrok configured). Start it when A reaches A4.1, because free ngrok URLs change on every start |
+| 0.8 | Public tunnel + `CALLBACK_SECRET` | B | ✅ | **Superseded by a real deployment**: the host app runs on AWS Elastic Beanstalk (`http://doorstep-prod.eba-bf4y27m3.us-east-1.elasticbeanstalk.com`, plain HTTP). Fastn env config `appBaseUrl` (env `test`) and org secret `CALLBACK_SECRET` are set; callbacks verified arriving. No tunnel needed |
 
 ## Track A: Fastn build via MCP
 
@@ -29,8 +33,8 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started · 👤 needs a human (b
 | A1 | Kickoff prompt + PLAN answers | ✅ | Ran as P2-R (rewritten to bake in entries 05–08). Probes: 163 Shopify fields, 12 sheet columns |
 | A2 | MAP: `propose_configuration` → approve → `configId` | ✅ | **`cfg_910772de96ce`** approved (draft `cdr_5aa939576171`). 📸 still to capture |
 | A3 | GATE: `submit_test_cases` → approve (15–25, covers T1–T9) | ✅ | **25 cases approved unedited** (`tcr_0cb01316d8f7`). 📸 still to capture |
-| A4 | BUILD: envConfig/secret, Flow A, Flow B, MULTI_TENANT, triggers, widget, alerts | ✅* | **Flow A `wf_9406750cbc34`** (v3) and **Flow B `wf_a51624da9db1`** (v1) both published, both MULTI_TENANT. Both triggers bound. Widget **`wgt_d1f67a4d76b3`** carries both flows, both triggers, config linked. *⛔ `appBaseUrl` + `callbackSecret` still unprovisioned; Fastn's own Activity alerts not configured |
-| A5 | Live test T1–T5 + deliberate failure debug loop T6–T7 | ✅* | **T2, T4, T5 ✅; T1, T3, T6, T7 partial.** *Three* real defects found and fixed live: boolean-vs-string conditions, `USER_ENTERED` writing `#ERROR!` into phone numbers, and Flow A erasing supplier data (entries 10, 11) |
+| A4 | BUILD: envConfig/secret, Flow A, Flow B, MULTI_TENANT, triggers, widget, alerts | ✅* | **Flow A `wf_9406750cbc34`** (v3) and **Flow B `wf_a51624da9db1`** (v1) both published, both MULTI_TENANT. Both triggers bound. Widget **`wgt_d1f67a4d76b3`** carries both flows, both triggers, config linked. `appBaseUrl`, `CALLBACK_SECRET` and `defaultCustomerId` provisioned 16:23–16:26 (entry 12, reconstructed). Flow A is now dev version 6, Flow B dev version 4. *Fastn's own Activity alerts still not verified as configured |
+| A5 | Live test T1–T5 + deliberate failure debug loop T6–T7 | ✅* | **T2, T4, T5, T9 ✅; T1, T3, T6, T7, T8 partial.** *Three* real defects found and fixed live: boolean-vs-string conditions, `USER_ENTERED` writing `#ERROR!` into phone numbers, and Flow A erasing supplier data (entries 10, 11) |
 | A6 | VERIFY: workflow_verifier report saved | ✅ | [evidence/verification-report.md](evidence/verification-report.md) — verdict, parity audit, T1–T9, the three defects, and a blocker checklist |
 
 ## Track B: host app
@@ -39,14 +43,14 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started · 👤 needs a human (b
 |---|---|---|---|
 | B1 | Scaffold `app/server` + `app/web`, tokens wired, embed-starter ported | ✅ | Vite + React 18 + Tailwind 3 on `design/tailwind-theme.cjs`; token minting ported to `app/server/src/fastn.js`; React Router 7.18 (avoids the v6 open-redirect advisory) |
 | B2 | Backend: 5 Tier 1 endpoints + loadCustomer + seed + validators | ✅ | Receiver (7 steps), feed, workspace, fastn-token, health, plus Tier 2 orders API |
-| B2t | Backend tests: receiver steps, duplicate, tenant isolation, derived views | ⚠️ | Was 26/26 against a **local** MongoDB. Against **Atlas** the suite fails: a parent hook fails and all 24 child tests report `cancelledByParent`. `initCollections` alone succeeds against Atlas, so it is not permissions — root cause not yet isolated (latency on the shared `before` hook is the leading suspect) |
+| B2t | Backend tests: receiver steps, duplicate, tenant isolation, derived views | ⚠️ | **Re-confirmed 26/26 against a local MongoDB at 17:58 on current main (includes the COOP change), so the code is fine.** Against **Atlas** a parent hook fails and all 24 child tests report `cancelledByParent`. **New hypothesis (untested, needs the Atlas URI):** the tests create their own database `doorstep_test_<pid>`, and `initCollections` was only ever checked against `doorstep`; an Atlas user scoped to one database would pass the second and fail the first. Check by running `npm test` with the hook error visible |
 | B3 | Design pass with `/ui-ux-pro-max:ui-ux-pro-max` | ✅ | [evidence/design-pass.md](evidence/design-pass.md): 12 verified matches + 1 labelled fallback |
 | B4.1 | AppShell + StatusPill (rail / tab bar) | ✅ | Rail from 768 px, bottom tabs below, pill priority, issue badge, skip link |
 | B4.2 | Sync health (+ empty / error / paused, deep link, Fix) | ✅ | Expandable rows, Fix by errorKind, stacked at 360 px |
 | B4.3 | Connections (widget iframe, token refresh, focus, returnTo toast) | ✅ | Error state with Retry; `returnTo` allow-listed |
 | B4.4 | Today (verdict, banner, stats, last 5, checklist + Confirm) | ✅ | |
 | B4.5 | Polling (5 s / 15 s, pause when hidden, paused banner) | ✅ | Backs off on errors, keeps last data |
-| B5 | Wire to Track A (tunnel URL + secret handed over) | 👤 | See 0.8, then prompt P3 |
+| B5 | Wire to Track A (tunnel URL + secret handed over) | ✅ | Wired through the Elastic Beanstalk deployment instead of a tunnel. Proven: Flow A's #1004 run reported `success` to `/api/sync-events` and it shows in Sync health |
 | B6 | Tier 2: Orders + drawer | ✅ | Stage filter, timeline drawer, focus trap, Escape returns focus |
 | B7 | Demo-events script (UI walkthrough without Fastn) | ✅ | `npm run demo-events -- --scenario happy` (also `failure`, `recover`, `reset`) |
 
@@ -54,7 +58,7 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started · 👤 needs a human (b
 
 | Check | Status | Result |
 |---|---|---|
-| T1–T9 (live Fastn) | 🔄 | **T2, T4, T5 ✅.** T1, T3, T6, T7, T8, T9 partial — see [evidence/test-results.md](evidence/test-results.md) |
+| T1–T9 (live Fastn) | 🔄 | **T2, T4, T5, T9 ✅** (T9 fully proven 17:50: both triggers fired for real). T1, T3, T6, T7, T8 partial. **PRD latency target (60 s) NOT met: 162–343 s measured.** See [evidence/test-results.md](evidence/test-results.md) |
 | Verification report | ✅ | [evidence/verification-report.md](evidence/verification-report.md) |
 | N1 pill + banner on failed event | ✅ | [evidence/nav-test-results.md](evidence/nav-test-results.md) |
 | N2 cold `?event=` deep link expanded | ✅ | Also works for the first retry attempt |
@@ -71,52 +75,67 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started · 👤 needs a human (b
 | Item | Status | Notes |
 |---|---|---|
 | README.md | ✅ | Setup, env, contract, tests, limits |
-| Submission document draft | 🔄 | [SUBMISSION.md](SUBMISSION.md): fill every ⟦TODO⟧ from Track A |
+| Submission document draft | 🔄 | [SUBMISSION.md](SUBMISSION.md): sections 3–6 corrected 17:55 to match the live platform. Human-only ⟦TODO⟧s remain (team names, video link, workflow links) |
 | App screenshots | ✅ | 9 in [evidence/screenshots/app/](evidence/screenshots/app/) |
 | MCP evidence screenshots | 👤 | During Track A, per the 📸 markers |
 | Demo video (2 min, Drive, logged-out check) | 👤 | Script in plan.md |
-| Workflow links + repo link | 🔄 | Workflow ids in [evidence/ids.md](evidence/ids.md); repo link still needed (this folder is not a git repo) |
+| Workflow links + repo link | 🔄 | Workflow ids in [evidence/ids.md](evidence/ids.md); repo: https://github.com/hassan2-aamir/doorstep_shopify_automation. Fastn workflow links still to paste from the dashboard |
 | Feedback form, both members | 👤 | |
 
-## Next actions for the team
+## Phase 2: extended deadline, Sun 20 Sep 18:00 PKT
 
-1. **Person A:** open a Claude session with the claude.ai **Fastn** connector connected. Run prompts
-   P0 → P6 from [evidence/prompts.md](evidence/prompts.md), logging each one verbatim.
-2. **Person A:** create the Fastn customer, then point the host app at its real UUID:
-   in `app/server`, run `npm run demo-events -- --scenario reset`, then
-   `npm run seed -- --fastn <uuid> --shop <store>.myshopify.com --sheet <sheet-url>`.
-3. **Person B:** create the Google Sheet per [sheet/README.md](sheet/README.md). In `app/server` run
-   `npm start` and `npm run tunnel`, then hand A the tunnel URL and `CALLBACK_SECRET` for prompt P3.
-4. **Both:** run T1–T9 live, fill [evidence/test-results.md](evidence/test-results.md) and
-   [SUBMISSION.md](SUBMISSION.md), record the video, submit before 3:30 PM.
+Scope from the team: deployment scripts for AWS, then the demo, the document, a landing page and an onboarding
+flow, then submit. Status as of Sat 19 Sep evening.
 
-## State at 16:10
+| # | Item | Status | Notes |
+|---|---|---|---|
+| P2.1 | AWS deployment scripts, [deploy/](deploy/) | ✅ | bundle, deploy, rollback, smoke (9 checks), set-env, provision, teardown; zero dependencies; 7 unit tests pass. Run for real against the live account: `--list`, `--dry-run`, `provision --dry-run`, `smoke` (9/9 on the live URL). Bundle passes `unzip -t`. **Not yet run:** the upload/deploy path and `provision` past its dry run (the first real `deploy.mjs` is their test) |
+| P2.2 | Landing page `/welcome` | ✅ | Minimal and Direct plus a demo panel built from the real components; no invented numbers; e2e L1, L6 |
+| P2.3 | Onboarding `/setup` (Store, Sheet, Confirm) and the `/` resolver | ✅ | URL-driven steps, inline validation, skippable, Back, live workspace = read-only walkthrough; e2e L2 to L5. **Tier 3 "Welcome and Setup" is no longer cut** (Rules tab still is) |
+| P2.4 | Demo package, [demo/script.md](demo/script.md) and `demo/preflight.mjs` | ✅ script | 6 scenes, 166-word voice-over, reset and recovery notes. Preflight ran against the live app: smoke 9/9, but flags 3 open issues and status `live` (expected before a take) |
+| P2.5 | Commit and push this work | ⬜ | Needs your go; 7 doc files plus the new code are uncommitted |
+| P2.6 | Deploy the new build to AWS (`node deploy/deploy.mjs`) | ⬜ | Needs your go, and a commit first so the label is not `-dirty`. The live app already has the COOP fix (smoke check passes) |
+| P2.7 | Move both flows to `instant` tier, re-run and re-save both suites | ⬜ | Needs your go (edits live flows). Fixes the 162 to 343 s latency; with the extra day this is worth doing before the video |
+| P2.8 | A real order with buyer email and address: T1, T3, and the demo's scene 4 | 👤 | Also settles whether Shopify withholds buyer data; see demo/script.md |
+| P2.9 | Record, edit, upload the demo; test the link logged out | 👤 | Then set `VITE_DEMO_VIDEO_URL`, rebuild, redeploy so the landing page links it |
+| P2.10 | Real-widget screenshots for the submission (all 📸 markers) | 👤 | The e2e screenshots use a mock widget |
+| P2.11 | Final pass on SUBMISSION.md, team names, Fastn workflow links, both feedback forms, submit | 👤 | |
 
-**Both flows live and proven.** A paid order becomes one sheet row; a tracking number produces exactly one
-buyer email and flips the row to Notified. Replays duplicate nothing; the buyer is never emailed twice.
+**Suggested timeline (PKT).** Sat evening: P2.5 to P2.8. Sun 09:00 to 12:00: record (P2.9), screenshots (P2.10).
+**Freeze at 12:00.** Sun 12:00 to 16:00: edit, upload, final document pass. **Submit by 16:00**, two hours
+early, then only fix what is broken.
+
+## State at 17:55
+
+**Verified live, read-only (evidence entry 13).** Nothing was written to Fastn, the sheet, Shopify or the app.
 
 | | |
 |---|---|
-| Config | `cfg_910772de96ce`, approved, linked to the widget |
-| Flow A | `wf_9406750cbc34` published v3, MULTI_TENANT |
-| Flow B | `wf_a51624da9db1` published v1, MULTI_TENANT |
-| Triggers | `orders/paid` app event + `*/5 * * * *` schedule, both bound |
-| Widget | `wgt_d1f67a4d76b3` "Shopify Orders", both flows, both triggers, config linked |
-| Green | T2, T4, T5 |
-| Partial | T1, T3, T6, T7, T8, T9 |
+| Flow A | `wf_9406750cbc34` dev version 6, `orders/paid` subscription **ACTIVE**, fired for real on #1002, #1003, #1004 (all completed 200, `created=1`) |
+| Flow B | `wf_a51624da9db1` dev version 4, cron **ACTIVE**, 22 unattended runs 16:00 to 17:45, 0 consecutive failures |
+| Host app | Elastic Beanstalk, `/api/health` 200, `status: live`. 24 h counts: synced 1, skipped 49 (rising), failed 3 |
+| Sheet | 4 data rows: #1001 Notified (the demo record); #1002 to #1004 New, tracking typed, no buyer name/email/phone |
+| Live issues | 3 open in Sync health, all the designed `data` failure (`send_buyer_email`, no buyer email) |
+| Green | T2, T4, T5, T9 |
+| Partial | T1, T3, T6, T7, T8 |
+| **Not met** | **Payment to row: 162, 181, 343 s (PRD target under 60 s).** Standard-tier queue; each run is only 2 to 5 s |
 
-**Three real defects found and fixed live** (all caught by asserting the returned value, never a status code):
-boolean-vs-string conditions silently filtering out every order; `USER_ENTERED` storing `#ERROR!` for any
-phone starting with `+`; and Flow A overwriting the supplier's buyer columns with blanks.
+## Open items, in priority order
 
-**Still open, in priority order:**
-
-1. **Provision `appBaseUrl` + `callbackSecret`** in the Fastn dashboard (Configurations tab, env `test`).
-   Nothing reaches the host app until then, so Sync health stays empty. The secret is in `app/server/.env`.
-2. **Fire the `orders/paid` app event.** The schedule half of T9 is green (the cron fired unattended and
-   completed); the app-event half needs a real order. Standard-tier runs queue for ~2 min before executing
-   — not a defect, but `instant` tier would make the demo feel live.
-3. **A real checkout order.** The store's only order is a draft with no customer, so the buyer-field
-   mappings are written but unverified. This is what turns T1 and T3 green.
-4. **The API test suite** still fails against Atlas (parent hook fails, 24 children cancelled).
-5. **Screenshots** — every 📸 marker in [evidence/prompts.md](evidence/prompts.md) is still unfilled.
+1. ~~Confirm the submission status.~~ Superseded: the deadline moved to Sun 20 Sep 18:00 PKT.
+2. **Move both flows to `executionTier: instant`.** The measured fix for the latency miss. Small change, but it
+   edits live flows and re-arms the regression gate, so it needs a go-ahead.
+3. **Re-run and re-save both validation suites.** `lastValidation.stale` is true on both flows since the version
+   4 to 6 edits. Required by the build skill before an edit counts as done.
+4. **Create one order with a real customer email and full address** (or add them to a draft order before marking
+   it paid). Only that answers whether Shopify sends buyer data to this app, and it turns T1/T3 green.
+5. **Close or explain the 3 live issues.** Typing an email into column E of rows 3 to 5 makes the next Flow B run
+   email that address and flip the rows to Notified (a live recovery demo, T7). It sends real mail, so use
+   your own address.
+6. **Flow A event path.** Use the webhook payload in `ctx.input` instead of re-scanning the 10 most recent orders.
+7. **Flow B noise.** Report `create_fulfillment` skipped once per order, not on every run (23 of the latest 50
+   events today).
+8. **API tests vs Atlas.** See the B2t hypothesis above.
+9. **Screenshots.** Every 📸 marker in [evidence/prompts.md](evidence/prompts.md) is still unfilled, including entry 13's.
+10. **Human-only:** demo video and Drive link (logged-out check), team names, Fastn workflow links, both feedback forms.
+11. **Hardening (post-demo):** TLS on the deployment, and sign-in instead of the demo-customer fallback.

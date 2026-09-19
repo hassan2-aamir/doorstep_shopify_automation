@@ -10,7 +10,23 @@
 | T6 | Disconnect the sheet on purpose | Failure in Sync health with step + reason; alert email arrives | 🟡 partial | Proven for `errorKind: data` instead: `errors=1`, step `send_buyer_email`, **one** alert email sent, and a re-run sent **no second alert** (guard `alert:self:...`). The connection-outage variant was not run — it would have broken the working demo state |
 | T7 | Reconnect and replay | Failed order completes, no duplicate | 🟡 partial | Substance proven: the failed record completed with `errors=0` and no duplicate row or email once the buyer email was supplied. Not via a disconnect/reconnect |
 | T8 | Change a config rule | Next run reflects it, no code change | ⬜ | Flow reads `fastn.config.get(cfg_910772de96ce)` every run; trace confirms the live read. The edit-and-rerun proof is still owed |
-| T9 | Fire each trigger for real | Completed execution confirmed by its event id | 🟡 partial | **Schedule ✅**: run-now `sched-evt_665adc8cf005` → `exec_e356678864cd` **completed 200** (1839 ms); the cron then fired **unattended**, `sched-evt_c448218cb9cc` → `exec_460b950abab6` **completed 200** (2082 ms). **App event ⬜**: `orders/paid` bound but needs a real order to fire |
+| T9 | Fire each trigger for real | Completed execution confirmed by its event id | ✅ | **Schedule ✅**: run-now `sched-evt_665adc8cf005` → `exec_e356678864cd` **completed 200** (1839 ms); the cron then fired **unattended**, `sched-evt_c448218cb9cc` → `exec_460b950abab6` **completed 200** (2082 ms), and has kept firing every 5 min (22 runs, 16:00 → 17:45 PKT, all carrying the schedule trigger id, 0 consecutive failures). **App event ✅** (proven 19 Sep 17:50): `orders/paid` fired for real three times, subscription `ACTIVE`: #1002 → `exec_705f59d79ecd` (`evt_faf99c058aa8418f`), #1003 → `exec_00fafff60319` (`evt_263e222aa74e435c`), #1004 → `exec_0a9d69385da5` (`evt_b98426c737fa448e`); each **completed 200**, `created=1, errors=0`, carrying `x-shopify-topic: orders/paid` and `x-fastn-trigger-id: 99102bca-…` |
+
+## Order-to-row latency (PRD metric, target under 60 s): not met
+
+Measured on the three real `orders/paid` deliveries, from Shopify's own `x-shopify-triggered-at` header to the execution's `completedAt`:
+
+| Order | Event reached Fastn | Waited in the queue | Run took | **Payment to row** |
+|---|---|---|---|---|
+| #1002 | 42.6 s | 117 s | 2.1 s | **161.6 s** |
+| #1004 | 12.2 s | 164 s | 4.6 s | **181.0 s** |
+| #1003 | 43.6 s | 298 s | 2.1 s | **343.4 s** |
+
+The event delivery is fast and the run itself is 2–5 s. The delay is the **standard execution tier's queue**. Both flows are `executionTier: standard`; moving them to `instant` (well inside its 30 s cap at these run times) is the untried fix. Until then the honest figure is 2.7 to 5.7 minutes, not "within a minute". Three samples only.
+
+## Live buyer-data check (T1 and T3 stay partial)
+
+Orders #1002–#1004 are all Shopify **draft orders** (`source_name: shopify_draft_order`, gateway `manual`) created without buyer details: #1002 and #1003 have `customer: null`; #1004 has a customer stub (`state: disabled`) with no email, name or phone and a shipping address holding only the country. So the buyer-field mappings are **still unverified**, and this does not show whether Shopify withholds buyer data from this app. An order created with a customer email and a full address is the only test that answers it.
 
 ## Flow B
 

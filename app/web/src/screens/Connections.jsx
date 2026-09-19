@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Storefront, Table, EnvelopeSimple } from '@phosphor-icons/react';
 import { api } from '../lib/api.js';
 import { useScreen } from '../lib/useScreen.js';
+import { useEmbed } from '../lib/useEmbed.js';
 import { safeReturnPath } from '../lib/safePath.js';
 import { useWorkspace } from '../context/WorkspaceContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { StatusPill } from '../components/StatusPill.jsx';
-import { Banner, Block, Button, ScreenHeading, Skeleton } from '../components/ui.jsx';
+import { Block, Button, ScreenHeading } from '../components/ui.jsx';
+import { EmbedPanel } from '../components/EmbedPanel.jsx';
 import { SYSTEM_LABELS } from '../lib/format.js';
 
 const SYSTEMS = [
@@ -24,21 +26,6 @@ function statusFor(key, ws) {
   return { variant: 'shipped', label: 'No problems' };
 }
 
-function useEmbedUrl() {
-  const [state, setState] = useState({ url: null, error: null, loading: true });
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const { url } = await api('/api/fastn-token');
-      setState({ url, error: null, loading: false });
-    } catch (error) {
-      setState({ url: null, error, loading: false });
-    }
-  }, []);
-  useEffect(() => { load(); }, [load]);
-  return { ...state, reload: load };
-}
-
 export function Connections() {
   const headingRef = useScreen('Connections');
   const [params] = useSearchParams();
@@ -48,28 +35,13 @@ export function Connections() {
   const focus = SYSTEM_LABELS[params.get('focus')] ? params.get('focus') : null;
   const rawReturn = params.get('returnTo');
   const returnTo = rawReturn ? safeReturnPath(rawReturn) : null;
-  const embed = useEmbedUrl();
-  const frameRef = useRef(null);
+  const embed = useEmbed();
   const focusRef = useRef(null);
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (focus) focusRef.current?.scrollIntoView({ block: 'center' });
   }, [focus]);
-
-  // N7: the widget posts fastn:session-expired when its token runs out. Mint a fresh one and reload in
-  // place; only messages from the widget's own origin are trusted.
-  useEffect(() => {
-    if (!embed.url) return undefined;
-    const widgetOrigin = new URL(embed.url).origin;
-    const onMessage = (ev) => {
-      if (ev.origin !== widgetOrigin) return;
-      const expired = ev.data === 'fastn:session-expired' || ev.data?.type === 'fastn:session-expired';
-      if (expired) embed.reload();
-    };
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [embed.url, embed.reload]);
 
   const back = () => {
     const label = SYSTEM_LABELS[focus] ?? 'Connection';
@@ -137,25 +109,7 @@ export function Connections() {
 
       <section aria-labelledby="widget-heading" className="space-y-3">
         <h2 id="widget-heading" className="text-lg font-bold">Your accounts</h2>
-        {embed.loading && <Skeleton className="h-[560px]" />}
-        {embed.error && (
-          <Banner
-            variant="danger"
-            title="Couldn't load your connections"
-            action={<Button variant="secondary" onClick={embed.reload}>Retry</Button>}
-          >
-            {embed.error.message}. The rest of Doorstep keeps working.
-          </Banner>
-        )}
-        {embed.url && !embed.loading && (
-          <iframe
-            ref={frameRef}
-            title="Connect your accounts (Fastn)"
-            src={embed.url}
-            allow="clipboard-write"
-            className="h-[560px] w-full rounded-md border-thick border-block-border bg-block"
-          />
-        )}
+        <EmbedPanel embed={embed} />
       </section>
 
       {ws && ws.status !== 'live' && (

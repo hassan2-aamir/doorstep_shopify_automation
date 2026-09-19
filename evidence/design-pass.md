@@ -30,3 +30,29 @@ Run before the frontend was written. It's constrained to the existing system in 
 - Removed focus rings: the global `:focus-visible` outline uses `--focus-*`.
 - Toasts for background events: toasts only confirm Sara's own actions; syncs use the banner and the pill.
 - Horizontal scroll at 360 px: stacked rows, and tested at 360 px (N6).
+
+## Second pass (19 Sep, evening): landing page and onboarding
+
+Invoked `/ui-ux-pro-max:ui-ux-pro-max` for the public landing page (`/welcome`) and the three-step setup (`/setup`),
+constrained to the existing tokens and `design/component-specs.md`. Searches run and what was applied:
+
+| Search | Result | Applied |
+|---|---|---|
+| `landing`: "minimal direct demo hero micro saas" | Matched *Minimal Single Column* (Minimal and Direct: hero, short description, 3 benefit bullets, CTA, footer; single CTA focus, large type, whitespace) and *Product Demo + Features* (product mockup, then feature breakdown; a non-video fallback; nothing autoplays under reduced motion) | Section order: hero, three benefit blocks, a demo panel, how it works, closing CTA, footer. One primary CTA repeated, a quiet secondary link. The demo is a static panel built from the real components, so it needs no video and has no motion to suppress |
+| `ux`: "onboarding stepper progressive disclosure" | *Onboarding, User Freedom*: provide Skip and Back, do not force a linear unskippable tour. Also *Heading Line Balance*: bound the measure and use `text-wrap: balance` | Setup has **Skip for now** in the header, **Back** on every step, and completed steps are clickable. Headings use `text-balance` with a bounded width |
+| `ux`: "scroll reveal reduced motion" | *Reduced Motion* and *Motion Sensitivity*: honour `prefers-reduced-motion`, no scroll-jacking or parallax | Only the hero fades in once (`motion-safe:animate-pop-in`); nothing is tied to scroll; the global reduced-motion rule already applies |
+
+Constraints kept from the earlier pass: flat blocks with no shadows, exactly **one** feature block per screen (the
+landing demo panel; the setup screens have none), word + icon + dot for every status, 44 px targets, 360 px
+minimum, indigo only for interactive elements.
+
+Two decisions that depart from the generic recommendation, on purpose:
+
+- The primary button is the indigo-700 fill from the design system, not the palette's green: green means *shipped* in this product.
+- The landing page makes **no numeric promises**. The PRD target was under 60 s; the measured figure is minutes
+  (`evidence/test-results.md`), so the copy says "within a few minutes".
+
+Verification: e2e checks L1 to L6 (`app/e2e/run.mjs`, 18/18 passing), including no horizontal scroll at 360 px on
+`/welcome` and every setup step, exactly one `h1`, exactly one `main`, no unnamed links or buttons. Screenshots:
+`evidence/screenshots/app/11-landing.png` through `16-setup-mobile.png` (the setup shots show the mock Fastn widget
+the test server uses; retake them with the real widget for the submission).

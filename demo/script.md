@@ -21,6 +21,22 @@ this, so scene 4 runs Flow B from Claude through the MCP, and scene 6 ends on th
 
 The voice-over above is 166 words. Do not add lines; cut a sentence before adding one.
 
+## Using the landing page as the pitch
+
+`/` is a ten-slide story you can present live or film for scene 1: press `Space` or `↓` to step, `↑` or `Shift+Space` to go
+back, `Home` and `End` to jump. Suggested mapping:
+
+| Slide | Use it for |
+|---|---|
+| 1 Cover, 2 Problem, 3 When it breaks | Scene 1, Sara's bad day (0:00 to 0:15). Slide 2 alone if time is tight |
+| 4 Insight, 5 How it works | Between scenes 1 and 2, or in a longer pitch |
+| 6 One screen | Scene 5's failure, told first: flip the "Something broke" switch to show the verdict change |
+| 7 Proof | Scene 3, after the real run. The figures are measured and sourced, so say "about 7 seconds" and no more |
+| 8 Audience, 9 Built on Fastn | The Q and A, and the MCP framing for scene 6 |
+| 10 Get started | The end card |
+
+The page only claims what the evidence backs (`evidence/test-results.md`). If you re-measure the latency, update slide 7.
+
 ## What has to be true before you press record
 
 Run `node demo/preflight.mjs` (read-only) and fix everything it flags. The reference state:

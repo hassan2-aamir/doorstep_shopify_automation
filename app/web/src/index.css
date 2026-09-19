@@ -37,6 +37,38 @@
   }
 }
 
+/* Landing story: full-screen slides that snap when you stop near one. `proximity`, so a slide taller than the
+   window (a phone, a short laptop) still scrolls freely. Applied by useStory only while the landing page is open. */
+html.story-snap {
+  scroll-snap-type: y proximity;
+  scroll-padding-top: 4.125rem;
+}
+.slide {
+  scroll-snap-align: start;
+}
+
+/* Reveals play once, when a slide is first seen, and only when motion is allowed. Without motion, or without
+   JS, nothing is ever hidden: every slide is simply in its final readable state. */
+@keyframes story-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .slide[data-seen='false'] .reveal {
+    opacity: 0;
+  }
+  .slide[data-seen='true'] .reveal {
+    animation: story-in var(--primitive-duration-slow) var(--primitive-easing-out-2) both;
+    animation-delay: calc(var(--i, 0) * 90ms);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

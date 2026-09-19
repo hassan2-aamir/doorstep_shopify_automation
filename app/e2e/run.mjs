@@ -453,6 +453,42 @@ try {
     }
     await ap.close();
   });
+
+  await check('L7', 'Landing story: 10 headed slides, keys step through them, the Today toggle flips, reduced motion shows everything', async () => {
+    const sp = await desktop.newPage();
+    await sp.goto(`${BASE}/welcome?customer=${CUSTOMER}`);
+    await sp.locator('h1').waitFor();
+    const shape = await sp.evaluate(() => {
+      const sections = [...document.querySelectorAll('main section')];
+      return { n: sections.length, unheaded: sections.filter((s) => !document.getElementById(s.getAttribute('aria-labelledby'))).length };
+    });
+    assert(shape.n === 10 && shape.unheaded === 0, `slides: ${JSON.stringify(shape)}`);
+
+    const current = () => sp.evaluate(() => Number(document.querySelector('nav[aria-label="Story chapters"] [aria-current="step"]')?.getAttribute('aria-label').split(' ')[0]) - 1);
+    assert(await current() === 0, 'story should start on slide 1');
+    await sp.keyboard.press('ArrowDown');
+    await sp.waitForFunction(() => document.querySelector('nav[aria-label="Story chapters"] [aria-current="step"]')?.getAttribute('aria-label').startsWith('2 of'));
+    await sp.keyboard.press('Space');
+    await sp.waitForFunction(() => document.querySelector('nav[aria-label="Story chapters"] [aria-current="step"]')?.getAttribute('aria-label').startsWith('3 of'));
+    await sp.keyboard.press('End');
+    await sp.waitForFunction(() => document.querySelector('nav[aria-label="Story chapters"] [aria-current="step"]')?.getAttribute('aria-label').startsWith('10 of'));
+
+    await sp.locator('#today').scrollIntoViewIfNeeded();
+    const verdict = sp.locator('#today [role=status]');
+    await verdict.filter({ hasText: 'All orders are moving' }).waitFor();
+    await sp.getByRole('button', { name: 'Something broke' }).click();
+    await verdict.filter({ hasText: '1 order needs attention' }).waitFor();
+    await sp.close();
+
+    const calm = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+    const cp = await calm.newPage();
+    await cp.goto(`${BASE}/welcome?customer=${CUSTOMER}`);
+    await cp.locator('h1').waitFor();
+    const hidden = await cp.evaluate(() => [...document.querySelectorAll('.reveal')].filter((e) => getComputedStyle(e).opacity !== '1').length);
+    assert(hidden === 0, `${hidden} reveal elements hidden under reduced motion`);
+    await calm.close();
+    return '10 slides, keys, toggle, reduced motion';
+  });
 } finally {
   await browser.close();
   server.kill();

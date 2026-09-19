@@ -56,3 +56,35 @@ Verification: e2e checks L1 to L6 (`app/e2e/run.mjs`, 18/18 passing), including 
 `/welcome` and every setup step, exactly one `h1`, exactly one `main`, no unnamed links or buttons. Screenshots:
 `evidence/screenshots/app/11-landing.png` through `16-setup-mobile.png` (the setup shots show the mock Fastn widget
 the test server uses; retake them with the real widget for the submission).
+
+## Third pass (20 Sep): the landing page as the demo story
+
+The second-pass landing page told what Doorstep does but could not carry a live pitch. `/` is now a ten-slide story
+(cover, problem, silence, insight, how it works, the one screen, proof, audience, how it was built, get started) that can be
+presented by scrolling or with the keyboard (`Space`, arrows, `PageDown`, `Home`, `End`) and still works for a cold visitor.
+Invoked `/ui-ux-pro-max:ui-ux-pro-max` again, constrained to the same tokens and `design/component-specs.md`:
+
+| Search | Result | Applied |
+|---|---|---|
+| `landing`: "storytelling problem solution pitch micro saas" | *Scroll-Triggered Storytelling*: intro hook, problem, journey, solution, climax CTA; a progress indicator; keep the narrative understandable without scroll effects; render each chapter in its final readable state under reduced motion | Slide order follows it. A progress bar under the header (all widths) and a dot rail (from 1280 px). Reveals are fade + 4 px rise, play once when a slide is first seen, and exist only inside `prefers-reduced-motion: no-preference`, so without motion or JS every slide is simply visible |
+| `ux`: "scroll snap progress indicator reduced motion" | *Reduced Motion*, *Motion Sensitivity* (no parallax or scroll-jacking), *Progress Indicators* | Snap is `proximity`, never `mandatory`, and slides use `min-height`, so a slide taller than the window (a phone) still scrolls freely. No scroll-scrubbing |
+| `ux`: "keyboard shortcuts navigation focus" | *Keyboard Navigation*, *Focus States* | Keys are ignored with a modifier held, in form fields, and for `Space` when a button or link has focus. In a slide clearly taller than the window the browser scrolls natively until the slide's edge. Every rail dot is a real link with an `aria-label` ("3 of 10: The insight") and `aria-current` |
+
+Departures, on purpose:
+
+- The recommendation gives each chapter its own colour. Colour here means who has to act, so chapters differ only by a
+  tonal step (`background` and `surface-sunken`), and the single dark feature block is the Today mock on slide 6.
+- Slide 6 has a "Something broke" toggle so the presenter can show the verdict flip live. The failure text replaces the
+  verdict sub-line and the first row instead of adding a banner, so the block does not change height.
+- The second pass made no numeric promises. Now that latency was measured, slide 7 shows **about 7 s** payment to row
+  (6.2, 7.5 and 7.6 s on three real orders, both flows on Fastn's instant tier), **1** row per replayed order (T2) and
+  **1** email per re-run shipment (T5), each with its source in `evidence/test-results.md`. No seller quote and no other
+  figures appear, and Sara is labelled a persona.
+- The header is sticky on `/` and `/welcome` only, so brand and links stay in view while presenting.
+
+Verification: a throwaway Playwright run against `vite preview` at 1440x900, 1024x768 and 360x740, light and dark, passed
+22 of 22 (no horizontal scroll; one `h1`, one `main`, ten headed slides, no unnamed controls; `Space`, arrows, `PageDown`,
+`Home` and `End` move between slides and update the progress bar; the toggle flips the verdict; `Space` on a focused button
+activates it; reduced motion shows all 62 reveal elements with no animation; with motion, an unseen slide starts hidden and
+is revealed on arrival). e2e check L7 in `app/e2e/run.mjs` covers the same ground, but it needs a local MongoDB and **has not
+been run**. Screenshots: `11-landing.png`, `12-landing-mobile.png`, `17-landing-problem.png` to `21-landing-today-dark.png`.

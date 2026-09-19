@@ -58,11 +58,12 @@ export function Block({ feature = false, as: Comp = 'section', className = '', .
   return <Comp className={`rounded-md border-thick p-6 ${skin} ${className}`} {...props} />;
 }
 
-export function Stat({ label, value }) {
+export function Stat({ label, value, note }) {
   return (
     <Block as="div">
       <p className="text-xs font-bold uppercase tracking-label text-stat-label">{label}</p>
       <p className="mt-3 text-stat tabular-nums text-stat-value">{value}</p>
+      {note && <p className="mt-3 text-sm text-foreground-muted">{note}</p>}
     </Block>
   );
 }

@@ -202,6 +202,21 @@ describe('Sync health feed: GET /api/sync-events', () => {
     assert.equal(new Set(body.events.map((e) => e.eventId)).size, body.events.length);
   });
 
+  test('events with the same run time list the larger (later) order number first, even when the limit cuts through them', async () => {
+    const runAt = new Date(Date.now() - 60000).toISOString(); // one flow run: every event carries this time
+    // Flow A lists newest first, so the oldest order is inserted last and would win a plain insertion-order tie.
+    for (const n of ['1004', '1003', '1002', '1001', '999']) {
+      await post(callback({ orderId: `9${n}`, orderNumber: n, outcome: 'skipped', step: 'dedupe_check', runAt }));
+    }
+    const numbers = (events) => events.map((e) => e.orderNumber);
+    assert.deepEqual(numbers((await get('/api/sync-events')).body.events), ['1004', '1003', '1002', '1001', '999']);
+    // The cut must keep the NEWEST orders of the tie, not whichever were inserted last.
+    assert.deepEqual(numbers((await get('/api/sync-events?limit=2')).body.events), ['1004', '1003']);
+    // A newer run still outranks an older run's larger order number: time comes first.
+    await post(callback({ orderId: '5', orderNumber: '5', outcome: 'skipped', step: 'dedupe_check', runAt: new Date().toISOString() }));
+    assert.equal((await get('/api/sync-events?limit=1')).body.events[0].orderNumber, '5');
+  });
+
   test('N4: a later success for the same order and workflow closes the issue', async () => {
     await post(failedB('1002'));
     assert.equal((await get('/api/workspace')).body.openIssueCount, 1);

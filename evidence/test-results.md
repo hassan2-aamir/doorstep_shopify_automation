@@ -24,6 +24,16 @@ Measured on the three real `orders/paid` deliveries, from Shopify's own `x-shopi
 
 The event delivery is fast and the run itself is 2–5 s. The delay is the **standard execution tier's queue**. Both flows are `executionTier: standard`; moving them to `instant` (well inside its 30 s cap at these run times) is the untried fix. Until then the honest figure is 2.7 to 5.7 minutes, not "within a minute". Three samples only.
 
+### After moving both flows to `instant` (19 Sep, 13:40 to 13:45 UTC)
+
+| Measurement | Standard tier (before) | Instant tier (after) |
+|---|---|---|
+| Flow B scheduled ticks, created to started | 105 s, 73 s, 135 s (the 13:25, 13:30 and 13:35 UTC ticks) | run-now `exec_cc5a34c7fe86`: created 13:41:16.151, started 13:41:16.176, so **25 ms** |
+| Flow B run duration | 4.6 to 5.1 s | 4.4 s |
+| Flow A (`orders/paid`) payment to row | 161.6, 181.0, 343.4 s | **6.2 s (#1005), about 7.5 s (#1006), 7.6 s (#1007)**: Shopify `x-shopify-triggered-at` to the execution's `completedAt` (`exec_84dd8ae33fd1`, `exec_99c3d6c1d8e6`, `exec_b6d39a070440`). Target under 60 s: **met** |
+
+Both paths are proven fast. The order path went from minutes to about 7 seconds.
+
 ## Live buyer-data check (T1 and T3 stay partial)
 
 Orders #1002–#1004 are all Shopify **draft orders** (`source_name: shopify_draft_order`, gateway `manual`) created without buyer details: #1002 and #1003 have `customer: null`; #1004 has a customer stub (`state: disabled`) with no email, name or phone and a shipping address holding only the country. So the buyer-field mappings are **still unverified**, and this does not show whether Shopify withholds buyer data from this app. An order created with a customer email and a full address is the only test that answers it.

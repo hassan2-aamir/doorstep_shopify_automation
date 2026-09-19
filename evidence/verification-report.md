@@ -193,3 +193,17 @@ was written to Fastn, the sheet, Shopify or the deployed app.
 Both triggers fire for real and complete; the schedule ran 22 times unattended (16:00 → 17:45, 0 consecutive
 failures); the app event ran 3 times on real orders; callbacks arrive at the deployed host app and appear in
 Sync health; a data failure surfaces once and keeps retrying without duplicate email.
+
+## Addendum: instant tier and re-validation, 19 Sep, 19:47 PKT
+
+Both flows moved from `standard` to `instant` (timeout 30 s, code unchanged) and both suites were re-run and saved, which cleared the stale flag (evidence entry 14).
+
+| Flow | Suite result | Pass | Partial | Skipped (reason recorded) |
+|---|---|---|---|---|
+| A `orders-to-fulfillment` | partial | 8 (TC-01, 03, 07, 10, 11, 12, 13, 25) | 1 (TC-02) | 7 (TC-04, 05, 06, 08, 09, 14, 15) |
+| B `tracking-to-shopify-and-buyer` | partial | 4 (TC-17, 19, 22, 24) | 1 (TC-20) | 4 (TC-16, 18, 21, 23) |
+
+- Scheduled-path queue wait: 73 to 135 s on standard, **25 ms** on instant (`exec_cc5a34c7fe86`).
+- Order path (`orders/paid`) not yet re-measured; needs a real order.
+- TC-09 (Flow A buyer fields) is blocked externally: Shopify withholds protected customer data from the app.
+- T6/T7 (a real sheet-connection outage and recovery: TC-21, TC-23) are intentionally left for the demo recording.

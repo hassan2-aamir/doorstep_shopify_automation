@@ -95,11 +95,19 @@ flow, then submit. Status as of Sat 19 Sep evening.
 | P2.4 | Demo package, [demo/script.md](demo/script.md) and `demo/preflight.mjs` | ✅ script | 6 scenes, 166-word voice-over, reset and recovery notes. Preflight ran against the live app: smoke 9/9, but flags 3 open issues and status `live` (expected before a take) |
 | P2.5 | Commit and push this work | ⬜ | Needs your go; 7 doc files plus the new code are uncommitted |
 | P2.6 | Deploy the new build to AWS (`node deploy/deploy.mjs`) | ⬜ | Needs your go, and a commit first so the label is not `-dirty`. The live app already has the COOP fix (smoke check passes) |
-| P2.7 | Move both flows to `instant` tier, re-run and re-save both suites | ⬜ | Needs your go (edits live flows). Fixes the 162 to 343 s latency; with the extra day this is worth doing before the video |
-| P2.8 | A real order with buyer email and address: T1, T3, and the demo's scene 4 | 👤 | Also settles whether Shopify withholds buyer data; see demo/script.md |
+| P2.7 | Move both flows to `instant` tier, re-run and re-save both suites | ✅ | Done 19 Sep about 19:40 PKT (evidence entry 14). Both flows `instant`, timeout 30 s, code untouched. Both suites re-run and saved (`partial`, `stale` cleared). **Latency proven on real orders: paid to row 6.2 s, 7.5 s, 7.6 s** (was 162 to 343 s); schedule ticks start in 25 ms (was 73 to 135 s). See evidence entry 16 |
+| P2.8 | A real order to measure order-to-row latency | ✅ | Done by you: orders #1005, #1006, #1007 give 6.2 to 7.6 s. Still open: an order **with a customer attached and a real street address**, to see the full buyer row (name, email, phone, address) created in one go |
 | P2.9 | Record, edit, upload the demo; test the link logged out | 👤 | Then set `VITE_DEMO_VIDEO_URL`, rebuild, redeploy so the landing page links it |
 | P2.10 | Real-widget screenshots for the submission (all 📸 markers) | 👤 | The e2e screenshots use a mock widget |
 | P2.11 | Final pass on SUBMISSION.md, team names, Fastn workflow links, both feedback forms, submit | 👤 | |
+
+| P2.12 | **Email does not reach the inbox: sender domain is not authenticated** | ⛔ | Found 19 Sep ~19:20 PKT (evidence entry 15). Mailjet accepted all 8 messages (`sent`), but the sender is `haamir.bscs23seecs@seecs.edu.pk` and Mailjet reports **SPF: Error and DKIM: Error** for that domain. The domain publishes SPF `include:_spf.google.com -all`, DMARC `p=quarantine; pct=50`, no Mailjet DKIM key, and its mail is on Google Workspace, so messages are very likely filed as spam or quarantined (not proven: the mailbox is not visible from here). **Check Spam and the Workspace quarantine for "Doorstep" and "has shipped".** Real fixes: (a) a sender on a domain we can authenticate; (b) SEECS IT adds the DNS records; (c) send through the Outlook Mail connector from a personal Microsoft account. Needs a decision before the recording |
+
+| P2.13 | Public URL is CloudFront; root shows the landing page | ✅ | 20 Sep ~02:25 PKT. CloudFront `E4LG4BHFVAD43` (HTTPS, CachingDisabled) fronts EB, so a deploy reaches it with no invalidation. `/` now renders the landing page instead of redirecting a live workspace to `/today` (that redirect was the "old website"). Deployed as `doorstep-3f0ac69-dirty-202609192122`; checked in a real browser through CloudFront: landing h1, new bundle `index-DobfS700.js`, dashboard loads, `/api` proxied, 0 failed requests. e2e 18/18. Public URL: https://d3nkcj9r1qd361.cloudfront.net/ |
+| P2.14 | **Set Fastn `appBaseUrl` to the CloudFront HTTPS URL** | ⬜ | Needs a decision: it is still the plain-HTTP origin, which a browser cannot open, so the alert email's **Fix it** link is dead in demo scene 5. It also sends the callback secret over HTTPS instead of HTTP. It is a shared env-config change, so both suites must be re-run afterwards (about 15 minutes) |
+
+| P2.15 | Latest activity: newest run first, then larger order number first | ✅ | 20 Sep ~03:00 PKT, reported by you. Events from one flow run share the run's timestamp, so ties fell to insertion order and Flow A (which lists newest-first) put the oldest order on top. Ties now break by numeric order number, descending, in the query itself so the 5-item cut keeps the newest orders. Applies to Today, Sync health, open issues and the Orders list. New API test (fails on the old query, passes on the new; 27/27), e2e 18/18, deployed as `doorstep-3f0ac69-dirty-202609192159`, live feed checked: run 21:58:16 lists #1008 down to #1001 |
+| P2.16 | e2e suite can no longer run against a remote database | ✅ | `app/server/.env` now points at Atlas. The e2e suite wipes events, so it now uses local MongoDB (or `E2E_MONGODB_URI`) and refuses a non-local URI without `E2E_ALLOW_REMOTE=1`. The first attempt after the `.env` change failed on DNS before connecting, so nothing was touched |
 
 **Suggested timeline (PKT).** Sat evening: P2.5 to P2.8. Sun 09:00 to 12:00: record (P2.9), screenshots (P2.10).
 **Freeze at 12:00.** Sun 12:00 to 16:00: edit, upload, final document pass. **Submit by 16:00**, two hours
@@ -123,12 +131,9 @@ early, then only fix what is broken.
 ## Open items, in priority order
 
 1. ~~Confirm the submission status.~~ Superseded: the deadline moved to Sun 20 Sep 18:00 PKT.
-2. **Move both flows to `executionTier: instant`.** The measured fix for the latency miss. Small change, but it
-   edits live flows and re-arms the regression gate, so it needs a go-ahead.
-3. **Re-run and re-save both validation suites.** `lastValidation.stale` is true on both flows since the version
-   4 to 6 edits. Required by the build skill before an edit counts as done.
-4. **Create one order with a real customer email and full address** (or add them to a draft order before marking
-   it paid). Only that answers whether Shopify sends buyer data to this app, and it turns T1/T3 green.
+2. ~~Move both flows to `executionTier: instant`.~~ Done (P2.7). Order-path latency still to be measured on a real order.
+3. ~~Re-run and re-save both validation suites.~~ Done (P2.7); the skipped cases carry their reasons and are still owed.
+4. ~~Buyer data is withheld by Shopify.~~ **Resolved 20 Sep about 03:00 PKT (evidence entry 16).** The Shopify connection was replaced by an **API Key** connection (a token from the store's own Doorstep app), and the API now returns customer name, email and phone. Proven: a Flow A run on order #1007 updated rows #1004 and #1005 with Shopify's exact values. Two limits remain: an order with **no customer attached** (#1001 to #1003, #1006, #1007) still has nothing to read, and the sample orders' **street address fields are empty** in Shopify, so the address cell is not yet proven. The token may expire (a client-credentials token lasts about 24 h): if Shopify calls start failing on Monday, re-issue it.
 5. **Close or explain the 3 live issues.** Typing an email into column E of rows 3 to 5 makes the next Flow B run
    email that address and flip the rows to Notified (a live recovery demo, T7). It sends real mail, so use
    your own address.

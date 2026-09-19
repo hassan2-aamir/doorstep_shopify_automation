@@ -4,6 +4,17 @@ import {
   WORKFLOW_A, WORKFLOW_B, WORKFLOW_LABELS, STEPS, systemForStep, reasonFor,
 } from './vocab.js';
 
+// Events from one flow run all carry that run's timestamp, so time alone leaves their order to insertion
+// order, and a flow that lists newest-first would put the oldest order on top. A larger order number is a
+// later order, so ties break newest order first. The key is numeric ("999" must not outrank "1004"),
+// taken from the order number and falling back to the order id when there is no usable number.
+const orderKeyOf = (numberField, idField) => ({
+  $convert: {
+    input: { $cond: [{ $gt: [{ $strLenCP: { $ifNull: [numberField, ''] } }, 0] }, numberField, idField] },
+    to: 'double', onError: 0, onNull: 0,
+  },
+});
+
 // Base step: the latest success-or-failure per (order, workflow). Skipped events are excluded so a
 // skip can never create an order or close an issue.
 export const latestPerOrderWorkflow = (customerId, extraMatch = {}) => [
@@ -26,7 +37,8 @@ export const latestPerOrderWorkflow = (customerId, extraMatch = {}) => [
 export const openIssuesPipeline = (customerId, extraMatch = {}) => [
   ...latestPerOrderWorkflow(customerId, extraMatch),
   { $match: { outcome: 'failed' } },
-  { $sort: { at: -1 } },
+  { $addFields: { orderKey: orderKeyOf('$orderNumber', '$_id.orderId') } },
+  { $sort: { at: -1, orderKey: -1 } },
 ];
 
 export const ordersPipeline = (customerId, { limit } = {}) => [
@@ -45,7 +57,8 @@ export const ordersPipeline = (customerId, { limit } = {}) => [
     ],
     default: 'waiting',
   } } } },
-  { $sort: { lastEventAt: -1 } },
+  { $addFields: { orderKey: orderKeyOf('$orderNumber', '$_id') } },
+  { $sort: { lastEventAt: -1, orderKey: -1 } },
   ...(limit ? [{ $limit: limit }] : []),
 ];
 
@@ -135,8 +148,12 @@ export async function getFeed(db, customerId, { issuesOnly, event, limit, sinceH
 
   let docs = issues;
   if (!issuesOnly) {
-    const recent = await db.collection('syncEvents')
-      .find({ customerId }).sort({ at: -1, _id: -1 }).limit(limit).toArray();
+    const recent = await db.collection('syncEvents').aggregate([
+      { $match: { customerId } },
+      { $addFields: { orderKey: orderKeyOf('$orderNumber', '$orderId') } },
+      { $sort: { at: -1, orderKey: -1, _id: -1 } },
+      { $limit: limit },
+    ]).toArray();
     docs = [...issues, ...recent];
   }
   const seen = new Set();

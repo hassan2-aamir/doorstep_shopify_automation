@@ -31,7 +31,7 @@ Run `node demo/preflight.mjs` (read-only) and fix everything it flags. The refer
 | Workspace status | `connecting` for scene 2, then `live` from scene 3 | Scene 2 needs the real stepper, not the read-only walkthrough |
 | Open issues at the start | 0 | A clean Today makes scene 5's failure the only red thing |
 | Sync health history | Empty or only the demo order | The three live "no buyer email" issues (#1002 to #1004) would clutter scene 3 |
-| One order paid **with a real buyer email and address** | yes (see below) | Scene 4's email has to go somewhere real |
+| One paid order, with a buyer email typed into column E | yes (see below) | Scene 4's email has to go somewhere real |
 | Sheet has only the header row | yes | The new order is row 2 |
 | Your own inbox open on the buyer address | yes | Scene 4 |
 | Claude terminal with the Fastn MCP authenticated | yes | Scene 4 |
@@ -54,21 +54,18 @@ MONGODB_URI="<atlas uri>" MONGODB_DB=doorstep DEMO_CUSTOMER_ID=<id> npm run demo
 That deletes the demo customer's events and sets the workspace back to `connecting`. It does **not** clear the
 sheet. Delete rows 2 and below by hand (rows 3 to 5 are #1002 to #1004, row 2 is #1001 Notified).
 
-### The buyer-email problem (decide before recording)
+### The buyer details (updated 20 Sep)
 
-Every order so far was a draft order without buyer details, so Flow B fails them as "no buyer email", by
-design. Two possibilities, and you have to find out which before the shoot:
+Shopify now returns the buyer's name, email and phone through the store's own app token, **but only for an order that has a
+customer attached.** Draft orders made without choosing a customer (#1001 to #1003, #1006, #1007) still have nothing to read.
+So, for the demo order:
 
-1. Create the order in Shopify Admin with a **customer that has an email and an address**, then mark it paid.
-   Look at the new sheet row: if `buyer_email` is filled, you are done.
-2. If `buyer_email` is still empty, Shopify is withholding protected customer data from the app (Shopify
-   restricts customer name, email, phone and address for apps that have not been approved for it). Then, in
-   scene 4, the **supplier** types the buyer's email into column E along with the tracking number. Say so in the
-   voice-over: "For this dev store, the buyer's email is added by hand." Doorstep already treats a hand-typed
-   email as the recovery path, so this is honest, not a hack.
-
-Whichever it is, put the finding in `SUBMISSION.md` (limitations) afterwards.
-
+- In Shopify, create the order **with the customer selected** (Hassan Aamir has an email and phone) and, if you want the address
+  cell to show something, a real street address; the sample orders' street fields are empty, so the cell only shows the country.
+- Mark it paid. The sheet row should appear with name, email and phone filled in by Doorstep, and **nobody types the buyer email**.
+- If a row still comes out blank, type the email into column E: Flow B emails whatever is there. Keep that as the fallback.
+- **The email still has to arrive in an inbox.** See the Scene 4 note below and `todo.md` P2.12: Mailjet's sender domain is not
+  authenticated, so the message may go to spam.
 ## Shot-by-shot notes
 
 **Scene 2, connect.** The Fastn panel must show **Active** on Shopify before you press Continue: prepare the
@@ -77,8 +74,10 @@ straight to Active). Type the store address slowly enough to read.
 
 **Scene 3, the wait.** Start the clock overlay when you press **Mark as paid**. Record the whole wait. In the
 edit, speed the empty part to 8x and slow to real time when the row appears. Show both the sheet and the
-Today count. Measured on this store, paid to row was 2.7 to 5.7 minutes on the standard tier. If the flows are
-moved to the `instant` tier first (`todo.md`, open item 2), this shrinks to seconds and needs no speed-up.
+Today count. Measured on this store, paid to row is now **about 6 to 8 seconds** (6.2, 7.5 and 7.6 s on real orders, both flows on the
+`instant` tier), so there is nothing to speed up: show the real wait, with the clock visible. On the standard tier it had been 2.7 to 5.7 minutes.
+
+**Scene 4, before you rely on the email.** Mailjet sends from a `seecs.edu.pk` address it cannot authenticate (SPF and DKIM both fail, the domain's DMARC says quarantine), so the buyer email may land in **Spam** or the Workspace quarantine. Send one test first and look there. Do not record scene 4 until an email reaches a visible inbox (see `todo.md` P2.12). The Mailjet status only says the message was handed over, not that it was delivered to the inbox.
 
 **Scene 4, MCP beat.** In the terminal type a plain instruction such as "run the tracking flow now" and let
 Claude call `triggerSchedulerNow`. Show the tool call and its `Ready`/`success` result in one still frame. This

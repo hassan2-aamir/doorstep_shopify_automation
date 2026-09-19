@@ -25,10 +25,12 @@ reads from here, so keep it current.
 | Mailjet connector id | `14a50f94-a154-46ca-abd1-faac4db7fbb9` (ACTIVE, BASIC auth) | `listConnections` |
 | Callback secret | host app: `app/server/.env`; Fastn: org secret `CALLBACK_SECRET` (`sec_61b3beb3d241`, created 16:24). Values are never committed | `listSecrets` |
 | Test-case set id | `tcr_0cb01316d8f7` (25 cases, approved unedited) | `createTestCaseDraft` |
-| Flow A workflow id / slug | **`wf_9406750cbc34`** / `orders-to-fulfillment` (dev version 6, MULTI_TENANT; validation stale) | `createWorkflow`, `listWorkflowVersions` |
-| Flow B workflow id / slug | **`wf_a51624da9db1`** / `tracking-to-shopify-and-buyer` (dev version 4, MULTI_TENANT; validation stale) | `createWorkflow`, `listWorkflows` |
+| Flow A workflow id / slug | **`wf_9406750cbc34`** / `orders-to-fulfillment` (dev version 6, live version counter 2, MULTI_TENANT; **executionTier instant**, timeout 30 s; validation re-run and saved 13:44Z, partial) | `createWorkflow`, `listWorkflowVersions` |
+| Flow B workflow id / slug | **`wf_a51624da9db1`** / `tracking-to-shopify-and-buyer` (dev version 4, live version counter 2, MULTI_TENANT; **executionTier instant**, timeout 30 s; validation re-run and saved 13:45Z, partial) | `createWorkflow`, `listWorkflows` |
 | Flow A trigger id + type | **`99102bca-8259-461c-b0bb-b3c32c5d3f50`** — Shopify app event `orders/paid` | `bind_app_trigger` |
 | Flow B trigger id (schedule, 5 min) | **`72d331d9-26c3-49d0-962c-e33564b0892c`** — cron `*/5 * * * *`, Asia/Karachi | `bind_schedule_trigger` |
+| Shopify connection | **API Key (INPUT)**, store `apparelstore-fp2czfal`, created 2026-09-19T21:45:11Z; replaced the OAuth connection. Token from the store's own "Doorstep" app (`read_customers` and protected customer data). The `orders/paid` webhook subscription survived the swap | `listConnections` |
+| Public URL (CloudFront `E4LG4BHFVAD43`, HTTPS, CachingDisabled, origin = the EB URL below) | `https://d3nkcj9r1qd361.cloudfront.net` | `aws cloudfront get-distribution-config` |
 | Host app URL (`appBaseUrl`) | `http://doorstep-prod.eba-bf4y27m3.us-east-1.elasticbeanstalk.com` (AWS Elastic Beanstalk, **plain HTTP**; env config `appBaseUrl`, env `test`, set 16:23) | `getEnvConfig` |
 | Env config `defaultCustomerId` | `0b55acb5-45f5-4ff1-9ba9-6fa3070becb2` (env `test`, set 16:26) | `listEnvironmentConfigs` |
 | Repo | https://github.com/hassan2-aamir/doorstep_shopify_automation | `git remote -v` |

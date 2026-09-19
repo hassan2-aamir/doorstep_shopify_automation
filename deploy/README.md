@@ -8,7 +8,8 @@ AWS CLI v2, signed in with `aws configure`.
 | What is live today | |
 |---|---|
 | Region / app / environment | `us-east-1` / `doorstep` / `doorstep-prod` |
-| URL | `http://doorstep-prod.eba-bf4y27m3.us-east-1.elasticbeanstalk.com` (plain HTTP, see [HTTPS](#https)) |
+| Public URL | `https://d3nkcj9r1qd361.cloudfront.net` (CloudFront `E4LG4BHFVAD43`, HTTPS) in front of the environment |
+| Origin | `http://doorstep-prod.eba-bf4y27m3.us-east-1.elasticbeanstalk.com` (plain HTTP). **Do not open this in a browser**: the app sends `upgrade-insecure-requests`, so the scripts are re-requested over HTTPS on a server with no TLS and the page stays blank. Server-to-server calls (Fastn callbacks, smoke tests) are fine |
 | Bundle bucket | `doorstep-deploy-<account id>` |
 
 Run everything from this folder. Every script reads its target from `DOORSTEP_*` environment variables
@@ -123,7 +124,13 @@ A plain redeploy of the same environment needs none of this: the URL does not ch
 - **Slow first deploy.** `npm install` on a `t3.micro` takes a minute or two; `deploy.mjs` waits up to 15.
 - **Cost.** One `t3.micro` plus pennies of S3. Free-tier eligible for a new account; otherwise a few dollars a month.
 
-## HTTPS
+## HTTPS and CloudFront
+
+A CloudFront distribution (`E4LG4BHFVAD43`, created by hand in the console, not by these scripts) fronts the environment: origin over HTTP, viewers redirected to HTTPS, **cache policy CachingDisabled**, all viewer headers forwarded except Host, all methods allowed. Because nothing is cached, **deploying to Elastic Beanstalk is deploying to CloudFront**: there is no separate upload and no invalidation to run. `node smoke.mjs --url <cloudfront url>` checks it. If someone later enables caching, add an invalidation of `/*` to the deploy.
+
+The Fastn env config `appBaseUrl` should be the CloudFront URL, not the origin: the alert email's "Fix it" link is built from it, and the origin address will not open in a browser. Callbacks work through either.
+
+Background on the original recommendation:
 
 The environment is plain HTTP, which means the callback secret and the demo dashboard travel unencrypted. For
 the hackathon demo that is acceptable and it is listed under limitations in `SUBMISSION.md`. Before real

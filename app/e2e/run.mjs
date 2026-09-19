@@ -5,7 +5,7 @@
 // widget area renders and N7 (token expiry) can be exercised. The mock stands in for Fastn only there;
 // the message the real widget posts on expiry is still an open question to verify.
 //
-// Needs: MongoDB running, app/server/.env (CALLBACK_SECRET, DEMO_CUSTOMER_ID), app/web built.
+// Needs: a LOCAL MongoDB running (never the .env one, see below), app/server/.env for CALLBACK_SECRET and DEMO_CUSTOMER_ID, app/web built.
 // Leaves the demo workspace in a clean "happy" state when done.
 import fs from 'node:fs';
 import http from 'node:http';
@@ -25,6 +25,16 @@ const env = Object.fromEntries(
   fs.readFileSync(path.join(serverDir, '.env'), 'utf8').split(/\r?\n/)
     .filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]),
 );
+// This suite WIPES the demo customer's events and resets the workspace. The database therefore never comes from
+// .env (which may point at Atlas and production data): it is local MongoDB unless E2E_MONGODB_URI says otherwise,
+// and a non-local URI is refused without an explicit E2E_ALLOW_REMOTE=1.
+const MONGO_URI = process.env.E2E_MONGODB_URI || 'mongodb://127.0.0.1:27017';
+if (!/^mongodb:\/\/(127\.0\.0\.1|localhost)[:/]/.test(MONGO_URI) && process.env.E2E_ALLOW_REMOTE !== '1') {
+  console.error('Refusing to run: the e2e suite deletes events and would run against a remote database. Set E2E_ALLOW_REMOTE=1 if you really mean it.');
+  process.exit(2);
+}
+env.MONGODB_URI = MONGO_URI;
+env.MONGODB_DB = process.env.E2E_MONGODB_DB || 'doorstep';
 const SECRET = env.CALLBACK_SECRET;
 const CUSTOMER = env.DEMO_CUSTOMER_ID;
 const PORT = 4001;
@@ -360,10 +370,12 @@ try {
     return 'h1, CTA to /setup, no h-scroll at 360 px';
   });
 
-  await check('L2', "'/' sends a half-set-up workspace to Setup", async () => {
+  await check('L2', "'/' is the landing page whatever state the workspace is in, and it links on to Setup", async () => {
     await page.goto(`${BASE}/?customer=${CUSTOMER}`);
-    await page.waitForURL('**/setup');
-    await page.getByRole('heading', { name: 'Connect your Shopify store' }).waitFor();
+    await page.getByRole('heading', { level: 1, name: /Paid orders reach the doorstep/ }).waitFor();
+    assert(new URL(page.url()).pathname === '/', `redirected to ${new URL(page.url()).pathname}`);
+    await page.getByRole('link', { name: 'See the live dashboard' }).click();
+    await page.waitForURL('**/today');
   });
 
   await check('L3', 'Setup: validates each step, saves Store and Sheet, Go live reaches Today', async () => {

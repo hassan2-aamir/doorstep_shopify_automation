@@ -6,7 +6,7 @@
 > 20 Sep, 6 PM; the demo plan is in [`demo/script.md`](demo/script.md).
 
 **Track:** 02, Ecommerce inventory and order sync · **Team:** ⟦TODO: names⟧ · **Links:** demo video
-⟦TODO: Drive link, checked logged out⟧ · repo https://github.com/hassan2-aamir/doorstep_shopify_automation · live app http://doorstep-prod.eba-bf4y27m3.us-east-1.elasticbeanstalk.com/welcome · workflows ⟦TODO: Fastn workflow links⟧
+⟦TODO: Drive link, checked logged out⟧ · repo https://github.com/hassan2-aamir/doorstep_shopify_automation · live app https://d3nkcj9r1qd361.cloudfront.net/ · workflows ⟦TODO: Fastn workflow links⟧
 
 ## 1. Problem and persona
 
@@ -124,13 +124,23 @@ per BUILD step 3.
   post-hackathon work. `/setup` guides the one demo workspace and does not create new merchants; on a live
   workspace it is a read-only walkthrough. The Rules tab was cut.
 - Connection cards show only what callbacks prove until we confirm whether the widget reports connection status.
-- **Order-to-row latency is minutes, not seconds.** Measured on three real `orders/paid` deliveries, payment to
-  sheet row took **162 s, 181 s and 343 s** (the PRD target was under 60 s). The event reaches Fastn in
-  12–44 s and each run takes 2–5 s; the rest is the standard execution tier queue. Moving both flows to the
-  `instant` tier is the fix and has not been applied.
-- **The buyer-field mappings are written but unverified.** All four dev-store orders are draft orders created
-  without buyer details (#1004 has a customer stub with no email or name and an address holding only the
-  country), so those paths still need an order with a real customer. That is also why three live orders sit
-  in Sync health as "no buyer email".
+- **Order-to-row latency is seconds, after moving both flows to Fastn's `instant` tier.** On the standard tier, three
+  real `orders/paid` deliveries took **162 s, 181 s and 343 s** from payment to sheet row, almost all of it queue wait
+  (73 to 135 s on scheduled ticks too). After the switch, three real orders took **6.2 s, 7.5 s and 7.6 s** (Shopify's
+  webhook timestamp to the run completing; executions `exec_84dd8ae33fd1`, `exec_99c3d6c1d8e6`, `exec_b6d39a070440`), so
+  the PRD target of under 60 s is met. Fastn caps the instant tier at 30 s per run; ours take about 5 s.
+- **Buyer data depends on the connection type.** Fastn's stock Shopify login (OAuth) requests no customer scope, and
+  Shopify also gates customer names, emails, phones and addresses behind protected-customer-data access, so through it
+  the `orders/paid` data arrived with those fields blank. We replaced it with an **API Key** connection using a token
+  from an app we own on the store (`read_customers` plus protected customer data). With it, the API returns name, email
+  and phone, and a Flow A run filled rows #1004 and #1005 with Shopify's values. Two limits remain: orders with no
+  customer attached (draft orders often have none) have nothing to read, and the sample orders' street address fields
+  are empty in Shopify, so address parsing is unproven. The token is short-lived if issued by the client-credentials
+  grant, and needs re-issuing.
+- **Email deliverability is unproven.** Mailjet accepts every message (all 8 sent show status `sent`), but the sender
+  address is on `seecs.edu.pk`, a domain we do not control, and Mailjet reports SPF and DKIM as failing for it. The
+  domain's DMARC policy is `quarantine` and its mail is hosted on Google Workspace, so messages sent through Mailjet are
+  likely to be filed as spam. Fixing it needs a sender on an authenticated domain, DNS records added by the domain owner,
+  or a different sending route (a mailbox provider's own connector). Until then, check spam when testing.
 - **No Shopify write-back**, per the scope gap in section 3.
 - Next: restock inventory and notify the buyer on cancel or full refund; a second buyer channel (WhatsApp).

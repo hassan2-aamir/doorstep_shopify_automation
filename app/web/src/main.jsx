@@ -6,7 +6,6 @@ import { WorkspaceProvider } from './context/WorkspaceContext.jsx';
 import { ToastProvider } from './context/ToastContext.jsx';
 import { AppShell } from './components/AppShell.jsx';
 import { PublicShell } from './components/PublicShell.jsx';
-import { Home } from './screens/Home.jsx';
 import { Welcome } from './screens/Welcome.jsx';
 import { Setup } from './screens/Setup.jsx';
 import { Today } from './screens/Today.jsx';
@@ -29,11 +28,11 @@ createRoot(document.getElementById('root')).render(
         <WorkspaceProvider>
           <Routes>
             <Route element={<PublicShell />}>
+              <Route index element={<Welcome />} />
               <Route path="welcome" element={<Welcome />} />
               <Route path="setup" element={<Setup />} />
             </Route>
             <Route element={<AppShell />}>
-              <Route index element={<Home />} />
               <Route path="today" element={<Today />} />
               <Route path="orders" element={<Orders />}>
                 <Route path=":orderId" element={<OrderDrawer />} />

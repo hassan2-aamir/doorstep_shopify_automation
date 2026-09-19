@@ -11,12 +11,12 @@ export function PublicShell() {
       </a>
       <header className="border-b-thick border-border bg-surface">
         <div className="mx-auto flex h-16 max-w-content items-center justify-between gap-3 px-gutter md:px-8">
-          <Link to="/welcome" className="flex min-h-touch items-center gap-2 text-lg font-extrabold tracking-heading">
+          <Link to="/" className="flex min-h-touch items-center gap-2 text-lg font-extrabold tracking-heading">
             <span aria-hidden className="grid h-8 w-8 place-items-center rounded-md bg-brand text-white"><Truck size={18} weight="fill" /></span>
             Doorstep
           </Link>
           <nav aria-label="Site" className="flex items-center gap-1">
-            <Link to="/welcome#how" className={buttonClass('ghost', 'hidden sm:inline-flex')}>How it works</Link>
+            <Link to="/#how" className={buttonClass('ghost', 'hidden sm:inline-flex')}>How it works</Link>
             <Link to="/today" className={buttonClass('ghost')}>Open dashboard</Link>
           </nav>
         </div>

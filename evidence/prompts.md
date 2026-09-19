@@ -348,3 +348,61 @@ What the code now live in Fastn does differently (from the workflow source, whic
 - **Regression gate:** both flows report `lastValidation.stale: true`, so the suite has not been re-run since the version 4–6 edits.
 - **Exposure:** the deployment is plain HTTP. Sync health is readable without sign-in (the server falls back to the demo customer), and the callback secret crosses the internet unencrypted on every callback.
 **Screenshot:** screenshots/16-fastn-triggers-and-executions.png (to capture)
+
+### 14 · 19:35–19:47 PKT · session 3 · Move both flows to the instant tier, re-run both suites (Phase 2, P2.7)
+
+**Prompt (verbatim):**
+> 2. move both flows to instant tier
+
+(In answer to the status message's list of decisions; the user's other answers were "commit and push", "it is ok as it is" for HTTPS, and "i'll do this" for the real order and the recording.)
+
+**MCP tools invoked:** `skill {"slug":"gateway"}`, `skill {"slugs":["integration_builder","workflow_verifier"]}` (both current: v21, v6), `getWorkflow` x2, `updateWorkflow` x2 (`executionTier: instant`, `timeoutMs: 30000`, every other field passed back unchanged), `listWorkflowExecutions` x3, `triggerSchedulerNow`, `testSavedWorkflow` x3, `saveWorkflowValidation` x2, `sendTestAppEvent` (refused), `getAppEventTrigger`.
+
+**What the skill required and how it was followed.** The build skill treats any change to a saved flow as re-arming the regression gate: re-run the whole attached suite, record one result per case, and only then call the change done. The tier change did not stamp a new `stale` marker (both flows' `lastValidation.stale` was already true from the version 4 to 6 edits), so the validation was re-run anyway and saved; that save is what cleared `stale` on both.
+
+**Result (read back, not assumed):**
+- **Both flows are `executionTier: instant`, timeout 30 s** (the tier's cap), retry policy unchanged, code byte-identical (dev v6 and v4). The platform's live version counter went 1 to 2 on each.
+- **The queue wait is gone on the schedule path.** Before: the 13:25, 13:30 and 13:35 UTC ticks waited **105 s, 73 s and 135 s** between creation and start. After: a run-now, `exec_cc5a34c7fe86` (event `sched-evt_34b00c7c0ddf`), was created 13:41:16.151 and started 13:41:16.176, **25 ms**, and completed in 4.4 s with the same output as the scheduled ticks.
+- **The `orders/paid` path is not yet re-measured.** A synthetic event could not be injected (`sendTestAppEvent` returned 404, "No active registration for connector", although `getAppEventTrigger` shows the trigger `ACTIVE` with subscription success). A real order is the only test, so the 60 s target stays unproven.
+- **Flow A validation saved, `partial`:** TC-01, 03, 07, 10, 11, 12, 13, 25 pass (TC-01/10/11 on the real `orders/paid` execution `exec_0a9d69385da5`, which ran on code version 6); TC-02 partial; TC-04, 05, 06, 08, 09, 14, 15 skipped, each with its reason.
+- **Flow B validation saved, `partial`:** TC-17, 19, 22, 24 pass; TC-20 partial; TC-16, 18, 21, 23 skipped with reasons. TC-21 and TC-23 (a real sheet-connection outage and recovery) are deliberately left for the demo recording.
+- **Parity holds:** the 10-order scan returned all 4 store orders, 4 sheet rows, `skipped=4` (all `dedupe_check`), no unexplained residue.
+- **New finding, and it corrects an earlier claim:** Shopify withholds the buyer's data from this app. Order #1004's `orders/paid` payload has `customer.verified_email: true` but no `email`, `first_name`, `last_name` or `phone`, no top-level `email` or `contact_email`, and `shipping_address` and `billing_address` holding only the country. That is protected-customer-data redaction, not "a draft order created without buyer details" as entries 12 and 13 assumed. A new order will not fix it; the buyer email has to be typed into column E, which Flow B already handles.
+- **Side effects on the live system:** none to Shopify or the sheet, and no email sent (no row had a buyer email; the three failing rows' alert state keys already existed). The runs posted about 10 extra `skipped` callbacks to the host app (Flow A `dedupe_check`, Flow B `create_fulfillment`), which show in Sync health and are cleared by the demo reset.
+
+**Screenshot:** screenshots/17-fastn-instant-tier-execution.png (to capture: `exec_cc5a34c7fe86` showing `executionTier: instant` and the 25 ms start)
+
+### 15 · 19:14–19:30 PKT · session 3 · Why is email not arriving? (read-only diagnosis)
+
+**Prompt (verbatim):**
+> so now, email automation does not work, can you check more on this??
+
+**MCP tools invoked:** `listWorkflowExecutions`, `testSavedWorkflow` (`dryRun: true`, sends and writes nothing), `getConnectorMethods` (mailjet), `runWorkflowCode` (read-only: `mailjet.listMessage`, `listSender`, `listSenderDomain`, no workflow attached), `listConnectors` (outlook, resend, brevo).
+
+**Result (read back, not assumed):**
+- **The flow is running.** Flow B ran every 5 minutes on the instant tier from 13:45 to 14:13 UTC, all completed 200. The sheet had no new row and no buyer email in column E, so there was nothing new to send.
+- **Every message the automation sent was accepted.** Mailjet lists 8 messages (10:28 to 12:33 UTC), all `Status: sent`, SpamAssassin score 0, none bounced or blocked. That is the buyer email for #1001 (10:31) and the alert emails for #1002 to #1004, all to one recipient.
+- **But the sender domain is not authenticated.** `listSenderDomain` shows `seecs.edu.pk` with **SPFStatus: Error and DKIMStatus: Error** (last checked 08:38 UTC, when the sender was validated). DNS confirms it: SPF is `v=spf1 include:_spf.google.com -all` (Mailjet not included), DMARC is `p=quarantine; pct=50`, `mailjet._domainkey.seecs.edu.pk` does not exist, and the MX records are Google's.
+- **Conclusion (likely, not proven):** messages claiming to be from `seecs.edu.pk` but sent through Mailjet fail DMARC, and the domain asks receivers to quarantine them. The mail is accepted by Google and then filed as spam or quarantined, which matches "email does not work". The mailbox itself cannot be inspected from here, so the user needs to check Spam and the Workspace quarantine.
+- **Options:** (a) a sender on a domain we can authenticate; (b) the domain's IT adds Mailjet's SPF and DKIM records; (c) switch Flow B to the `microsoftOutlookMail` connector (OAuth, `Mail.Send`) from a personal Microsoft account, which needs no DNS but a code change, a new connection and another regression run. Resend is not in the connector catalogue; Brevo would have the same domain problem.
+- **No changes were made to any flow, the sheet, or Mailjet.**
+
+### 16 · 20 Sep, ~03:00 PKT · session 3 · Verify that Shopify now returns names, emails and phones, and that they reach the sheet (read-only)
+
+**Prompt (verbatim):**
+> First verify now that shopify allows reading names, emails etc. and they are working.
+
+(Context: the user had created a Doorstep app in the Shopify Dev Dashboard, installed it on the store, and replaced Fastn's Shopify connection with an API Key connection.)
+
+**MCP tools invoked:** `runWorkflowCode` x3 (read-only: Shopify order list; Google Sheets read; a copy of Flow A's row-building logic applied to live orders, no writes; emails masked in output), `listConnections`, `getAppEventTrigger`, `getTriggerMonitoring`, `listWorkflowExecutions` x2.
+
+**Result (read back, not assumed):**
+- **The connection changed.** `listConnections` shows the Shopify connection is now `authMethod: API Key` (created 21:45:11Z, 2026-09-19); the OAuth connection is gone. Fastn's OAuth login requested no customer scope at all (its scope list has orders, products, inventory and fulfillment scopes only).
+- **Shopify now returns buyer data.** The same order that was redacted at 13:41Z, #1004, now has `customer.first_name`, `last_name`, `email`, `phone`, top-level `email` and `phone`, and address objects with the full field set. #1005 has the customer's name, email and phone too. Emails were masked in the check output.
+- **It reaches the sheet automatically.** Two sheet reads a few minutes apart: rows #1004 and #1005 changed from typed values ("Sara Khan", "923232943222") to Shopify's exact values ("Hassan Aamir", "+923232943222"). The execution that did it is `exec_b6d39a070440` (order #1007, `orders/paid`, workflow version 6): `created 1, updated 2, skipped 4, errors 0`.
+- **The webhook survived the connection swap.** #1007 was delivered through the existing subscription after the swap; the trigger reads `ACTIVE`, health `healthy`, 5 processed, 0 failed, empty DLQ.
+- **Latency on the order path is proven.** Shopify `x-shopify-triggered-at` to `completedAt`: #1005 6.2 s (`exec_84dd8ae33fd1`), #1006 about 7.5 s (`exec_99c3d6c1d8e6`), #1007 7.6 s. On the instant tier, queue wait is about 20 ms. Before: 162, 181, 343 s.
+- **Limits still open.** (1) An order with no customer attached has nothing to read (#1001 to #1003, #1006, #1007): that is the data, not access. (2) The sample orders' street fields are empty strings in Shopify, so address parsing is not proven; the cell shows only the country. (3) #1006's typed row ("Hassan", "923232943222") came from a person, not from Shopify, because that order has no customer. (4) If the token came from the client-credentials grant it expires after about 24 h, so around 02:45 PKT on 21 Sep.
+- **No changes were made to any flow, the sheet, or Shopify.** The two new orders' callbacks and this session's runs added a few events to Sync health.
+
+**Screenshot:** screenshots/18-fastn-shopify-api-key-connection.png (to capture: Connections showing Shopify via API Key)

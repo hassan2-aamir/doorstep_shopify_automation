@@ -1,7 +1,7 @@
 # Doorstep
 
 **Order-to-doorstep autopilot for small Shopify merchants.** Paid orders land in the supplier's Google
-Sheet in a few minutes (measured 2.7 to 5.7 minutes on Fastn's standard execution tier). When the supplier types a tracking number, it goes back to Shopify and to the
+Sheet in seconds (measured 6.2 to 7.6 s on real orders with both flows on Fastn's instant tier; it was 162 to 343 s on the standard tier). When the supplier types a tracking number, it goes back to Shopify and to the
 buyer. Every failure shows up in plain words with a one-tap fix instead of disappearing.
 
 Built on [Fastn](https://fastn.ai) for Build with Fastn, Track 02 (Ecommerce inventory and order sync).
@@ -61,7 +61,9 @@ npm start                       # http://localhost:4000
 npm run tunnel                  # optional: public URL for Fastn callbacks while developing (ngrok)
 ```
 
-Open `/welcome` for the landing page, `/setup` for the guided setup, `/today` for the control tower.
+Open `/` for the landing page, `/setup` for the guided setup, `/today` for the control tower.
+
+Live: **https://d3nkcj9r1qd361.cloudfront.net/** (CloudFront, HTTPS, in front of the Elastic Beanstalk environment). Open that one in a browser: the plain-HTTP Elastic Beanstalk address serves a `upgrade-insecure-requests` policy and will not load in one.
 
 For UI development, run `npm run dev` in `app/web` (Vite on :5173, proxies `/api` to :4000).
 
@@ -125,8 +127,8 @@ This is for walking through the screens only. It never stands in for the live ac
 ## Tests
 
 ```bash
-cd app/server && npm test                   # 26 API tests against a throwaway MongoDB database
-cd app/e2e && npm install && npm test       # N1–N7, plus landing and setup checks, in local Chrome/Edge (needs a web build; E1 also needs an unconfigured API on UNCONFIGURED_BASE)
+cd app/server && npm test                   # 27 API tests against a throwaway MongoDB database
+cd app/e2e && npm install && npm test       # N1–N7, plus landing and setup checks, in local Chrome/Edge (needs a web build and a LOCAL MongoDB: it deletes events, so it ignores the MONGODB_URI in .env and refuses a remote one; E1 also needs an unconfigured API on UNCONFIGURED_BASE)
 cd deploy && npm test                       # zip writer, bundle contents, argument parsing
 node design/check-contrast.cjs design/tokens.css   # WCAG audit of every token pair, both themes
 ```

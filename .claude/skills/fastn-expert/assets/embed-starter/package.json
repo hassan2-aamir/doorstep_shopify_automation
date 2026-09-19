@@ -1,0 +1,10 @@
+{
+  "name": "fastn-embed-starter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal host app: Fastn widget (Connect your store) + Sync health panel fed by workflow callbacks.",
+  "scripts": {
+    "start": "node --env-file=.env server.js"
+  },
+  "engines": { "node": ">=20.6" }
+}

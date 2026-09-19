@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connect your store</title>
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --fg:#161a22; --muted:#5b6472; --line:#e3e6ec; --ok:#157347; --warn:#8a6100; --bad:#b42318; --accent:#4f46e5; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0f1218; --card:#181c25; --fg:#eef1f6; --muted:#9aa4b5; --line:#2a3040; --ok:#4cc38a; --warn:#e7b34a; --bad:#ff7b72; --accent:#8b85ff; }
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--fg); }
+    main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; display: grid; gap: 20px; }
+    h1 { font-size: 22px; margin: 0; } h2 { font-size: 16px; margin: 0 0 4px; }
+    p.sub { margin: 0; color: var(--muted); }
+    section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+    iframe { width: 100%; height: 560px; border: 0; border-radius: 8px; background: transparent; }
+    .stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+    .stat { border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; min-width: 110px; }
+    .stat b { display: block; font-size: 22px; }
+    .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+    .tablewrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    td.err { white-space: normal; color: var(--bad); }
+    .banner { display:none; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--bad); color: var(--bad); }
+    button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+    .empty { color: var(--muted); padding: 12px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Connect your store</h1>
+    <p class="sub">Connect your store and fulfillment sheet once. Orders move automatically, and anything that fails shows up below.</p>
+  </header>
+
+  <section aria-labelledby="connect">
+    <h2 id="connect">Your connections</h2>
+    <div id="connectBanner" class="banner" role="alert"></div>
+    <iframe id="fastn" title="Fastn integrations widget" allow="clipboard-write"></iframe>
+  </section>
+
+  <section aria-labelledby="health">
+    <h2 id="health">Sync health</h2>
+    <p class="sub">Updated every few seconds from your automation's own reports.</p>
+    <div class="stats" aria-live="polite">
+      <div class="stat"><span>Synced</span><b id="sSuccess" class="ok">0</b></div>
+      <div class="stat"><span>Skipped (already done)</span><b id="sSkipped" class="warn">0</b></div>
+      <div class="stat"><span>Failed</span><b id="sFailed" class="bad">0</b></div>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>When</th><th>Order</th><th>Workflow</th><th>Result</th><th>Details</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty">No activity yet.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const customer = new URLSearchParams(location.search).get('customer') || '';
+  const qs = customer ? `?customer=${encodeURIComponent(customer)}` : '';
+  const frame = document.getElementById('fastn');
+  const banner = document.getElementById('connectBanner');
+
+  async function loadWidget() {
+    banner.style.display = 'none';
+    try {
+      const r = await fetch('/api/fastn-token' + qs);       // fresh token on every load, never cached or hard-coded
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'Could not start the widget');
+      frame.src = j.src;
+    } catch (e) {
+      banner.textContent = e.message;
+      banner.style.display = 'block';
+    }
+  }
+
+  // Refresh caps at 7 days per session: the widget posts this message, then stops. Mint a fresh token.
+  window.addEventListener('message', (ev) => {
+    if (ev.data === 'fastn:session-expired' || (ev.data && ev.data.type === 'fastn:session-expired')) loadWidget();
+  });
+
+  function cell(text, cls) {
+    const td = document.createElement('td');
+    if (cls) td.className = cls;
+    td.textContent = text ?? '';          // textContent, never innerHTML: callback data is untrusted
+    return td;
+  }
+
+  async function refreshHealth() {
+    try {
+      const r = await fetch('/api/sync-events' + qs);
+      const d = await r.json();
+      document.getElementById('sSuccess').textContent = d.success;
+      document.getElementById('sSkipped').textContent = d.skipped;
+      document.getElementById('sFailed').textContent = d.failed;
+      const tbody = document.getElementById('rows');
+      tbody.replaceChildren();
+      for (const e of d.recent) {
+        const tr = document.createElement('tr');
+        tr.append(
+          cell(new Date(e.at).toLocaleString()),
+          cell(e.orderId),
+          cell(e.workflow),
+          cell(e.outcome, e.outcome === 'failed' ? 'bad' : e.outcome === 'success' ? 'ok' : 'warn'),
+          cell(e.error ? `${e.step ? e.step + ': ' : ''}${e.error}` : '', 'err'),
+        );
+        tbody.append(tr);
+      }
+      document.getElementById('empty').style.display = d.recent.length ? 'none' : 'block';
+    } catch { /* keep the last good view */ }
+  }
+
+  loadWidget();
+  refreshHealth();
+  setInterval(refreshHealth, 5000);
+</script>
+</body>
+</html>

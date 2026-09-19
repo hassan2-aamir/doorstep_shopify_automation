@@ -45,6 +45,29 @@ sync anyway · missing buyer email: write the row, Flow B fails it as `data`.
 
 📸 PLAN summary · 📸 `get_connector_events` result for Shopify
 
+### P2-R · Kickoff, revised after entries 05–08 (A1) — **use this one, not P2**
+P2 was written before we knew the Shopify connection has only 9 scopes and 403s on fulfillment orders
+(entries 05, 07, 08). Pasting P2 unchanged makes the agent rediscover that at MAP and burn the clock.
+P2-R states the finding up front and puts the write-back behind a config switch, which is the plan's
+A4 decision gate taken in advance (the 30-minute time-box expired at entry 08).
+
+> Use the fastn integration_builder skill. Build "Doorstep" for my customers (multi-tenant, they connect their own accounts).
+> Entities: Shopify Orders and the Google Sheet tab "Fulfillment". Flow 1 `orders-to-fulfillment`: when a paid, non-test Shopify order arrives, upsert one sheet row keyed on order id, idempotent (replays and edits must not duplicate). Flow 2 `tracking-to-shopify-and-buyer` (every 5 minutes): rows with a tracking number and status not Notified get one buyer email, then status Notified and notified_at; never email twice.
+> Known constraint, already probed, do not re-litigate: this Shopify connection is OAuth with only 9 scopes (read/write orders, products, inventory, draft_orders, read_locations). All six `*_fulfillment_orders` scopes are missing and `listFulfillmentOrdersJson` returns 403. So Flow 2 must gate the Shopify fulfillment behind a config boolean `shopifyWriteBack`, default **false**. When false, Flow 2 skips `create_fulfillment` and reports that step as `skipped`, not `failed`. Build the branch so flipping the boolean to true later needs no code change.
+> Ongoing only, no backfill. One config for the whole use case, one widget named "Shopify Orders". Sheet columns: order_id, order_number, created_at, buyer_name, buyer_email, buyer_phone, ship_address, items, status, tracking_number, carrier, notified_at. The Shopify order `id` is numeric. A line item's `sku` can be null, so the mapping must tolerate it.
+> Every flow returns {created, updated, skipped, errors, errorDetails}, uses a retry policy of 3 attempts with exponential backoff, and for each record reports {customerId, eventId, orderId, orderNumber, workflow, outcome, step, errorKind, error, runAt} to `${appBaseUrl}/api/sync-events` (appBaseUrl from fastn.envConfig) with header x-callback-secret from fastn.secrets callbackSecret. A failed callback must not fail the run. step is one of read_order, apply_conditions, dedupe_check, upsert_row, read_rows, create_fulfillment, send_buyer_email, update_status, send_alert. errorKind is connection for auth/expired-token errors, data for a missing buyer email or address, other otherwise. On a failure, email the merchant (alertEmail from config) once per failing record, guarded by state key alert:{customerId}:{orderId}:{workflow}, with a "Fix it" link to `${appBaseUrl}/sync-health?event=<eventId>`.
+> Email sends go through the **Mailjet** connection (`sendEmail`, POST /v3.1/send) using the one Active sender. There is no Gmail or SendGrid connection in this workspace.
+> Flow 1's trigger is the Shopify app event **`orders/paid`** (confirmed present, `registered: false`, so create the subscription and check `Subscription: Subscribed`). Use `orders/updated` for edits.
+> Keep the test-case set in the small band (about 15 to 25). Finish with the verification report.
+
+**PLAN answers (unchanged):** Orders → Fulfillment rows, tracking to the buyer · ongoing only ·
+paid, not test · **my customers (multi-tenant)** · every 5 minutes · match on order id · missing phone:
+sync anyway · missing buyer email: write the row, Flow B fails it as `data`.
+
+**Placeholder for appBaseUrl:** no tunnel is running yet. Set `appBaseUrl` to `https://placeholder.invalid`
+at A4.1 and correct it with P3 once Track B's tunnel is up; callbacks failing must not fail a run, so the
+flows still pass their tests meanwhile.
+
 ### P3 · Callback wiring (A4.1, once Track B's tunnel is up)
 > Set fastn.envConfig appBaseUrl to <TUNNEL_URL> and store fastn.secrets callbackSecret as <CALLBACK_SECRET>. Do not put either value in workflow code.
 
@@ -169,3 +192,111 @@ Shopify's OAuth scopes include `write_orders` and the fulfillment-order read/wri
 **Result:** **Still not fixed.** Same 9 scopes; `listFulfillmentOrdersJson` still **403**. The Shopify connection was deleted and re-created (`createdAt` moved from 08:24:37Z to 09:04:05Z) but it is still `authType: OAUTH` with `authMethodId: null`. The API-key method would show `authMethodId: 03bce64a-fa88-42ec-b902-7f43156dffe3` and an `INPUT`-type auth. So the token method was not the one used, both times. Nothing else changed: shop and order reads work, and the Sheets and Mailjet connections are unchanged and still ACTIVE.
 **Elapsed:** about 20 minutes since the first 403 was found (about 14:05 PKT, roughly 85 minutes before a 3:30 PM lock), so the 15-minute time-box set in entry 06 has passed.
 **Screenshot:** screenshots/08-shopify-retest-2.png (to capture)
+
+### 09 · 15:22 · A · MAP: probes + propose_configuration (A2)
+**Prompt**
+> read the todo and plan. Then proceed with whatever needs completion.
+
+(then, on the blocked-decision question: "Try the Fastn build now", deadline confirmed 16:30)
+
+**MCP tools invoked:** `skill {"slug":"gateway"}`, `whoami`, `skill {"slugs":[...]}`, `listWorkflows`, `listConnections`, `getConnectorMethods` (googleSheets), `probeConnector` ×2, `proposeConfiguration`
+**Result:**
+- Gate cleared (gateway v12). All five local skills match published versions, so nothing reinstalled.
+- `whoami`: actor `user`, `actingAsTenant: false`, role `owner`, env `test` → partner staff, full four-phase flow; tenancy already answered by plan.md as Path B.
+- `listWorkflows`: **0 workflows**. Clean slate, so the `create_workflow` slug-upsert hazard does not apply.
+- `listConnections`: exactly one ACTIVE connection each for Shopify, Google Sheets, Mailjet → no connection-choice ambiguity.
+- Google Sheets target CREATE action is **`appendValues`**; read action `getValues`.
+- **Source probe** `probe_1d70b9c2-8862-4036-97f3-bc95312dd903` — shopify / `list202004OrdersJson`, **163 fields**. `financial_status: "paid"`, `test: false`, numeric `id`, `line_items.sku` empty. `customer`, `shipping_address`, `billing_address` came back **empty** (order #1001 is a draft order with no customer), so their leaf fields were never discovered.
+- **Target probe** `probe_cc3184c0-41c6-42aa-a992-b3943b4313ab` — googleSheets / `getValues` on `Fulfillment!A1:L2`, **12 fields**. The Sheets API is positional: fields come back as `0..11` with the 12 headers as sample values, re-confirming the headers exact and in order. Target fields are therefore indices carrying the header as `targetLabel`.
+- `proposeConfiguration` → draft **`cdr_5aa939576171`**, status `pending`, reviewUrl issued (its token is short-lived and deliberately not stored here).
+
+**Three mappings proposed** (id→0 order_id high, order_number→1 high, created_at→2 high) and **two conditions** grounded in real probed values (`financial_status in paid`, `test equals false`). Matching: natural key on Shopify `id` ↔ column 0.
+
+**Deliberately NOT in `mappings[]`, per the skill's rules:**
+
+| Column | Why omitted | Where it gets built |
+|---|---|---|
+| H `items` | line_items array → one cell is a **reshape**; a placeholder mapping would lock that review row and block approval of the whole config | Workflow code, Flow A |
+| D–G buyer_name / buyer_email / buyer_phone / ship_address | `customer.*` and `shipping_address.*` leaves absent from the probe, so `proposeConfiguration` would drop them as hallucinated | Workflow code, confirmed against a real checkout order at T1 |
+| I `status` | A chosen constant, not a source field | User sets it as a **fixed value** `New` at the reviewUrl |
+| J–L tracking_number / carrier / notified_at | Supplier-owned and Flow-B-owned; nothing in a Shopify order maps to them | Flow B |
+
+**Empty-required handling surfaced rather than silently skipped (the skill requires this):** `buyer_email` empty → the PRD rule stands, Flow A writes the row anyway and Flow B fails that record as `errorKind: data`, so it surfaces in Sync health instead of being dropped.
+**Screenshot:** screenshots/09-config-review.png (to capture, before + after approval)
+
+### 10 · 15:45–16:10 · A · GATE, BUILD and the debug loop (A3, A4)
+**Prompt**
+> ive approved the test cases and added the ip
+
+**MCP tools invoked:** `getConfigDraft`, `createTestCaseDraft`, `getTestCaseDraft`, `listEnvironmentConfigs`, `listSecrets`, `runWorkflowCode` (live write probe), `createWorkflow`, `testSavedWorkflow` ×3, `editWorkflowCode`, `saveWorkflowValidation`, `setWorkflowConnectorScope` ×2, `createWidget`, `listConfigs`, `updateConfig`
+
+**Result:**
+- **MAP approved** → `configId` **`cfg_910772de96ce`**, all three mappings and both conditions intact.
+- **GATE approved** → `tcr_0cb01316d8f7`, **25 test cases, accepted unedited**, covering T1–T9.
+- **Env-config gap surfaced, not worked around:** `listEnvironmentConfigs` and `listSecrets` both returned empty. BUILD step 3 forbids writing a placeholder to unblock, so the gap was reported to the user: `appBaseUrl` (env config) and `callbackSecret` (secret) are still unprovisioned.
+- **Write probe (BUILD step 4) passed live:** real order → approved mappings → `appendValues` **200** (`Fulfillment!A2:L2`, 12 cells) → read-back field-exact → `clearValues` cleanup. Also learned that **Sheets trims trailing empty cells on read** (9 elements returned for a 12-column row), which Flow B must pad for.
+- Flow A created: **`wf_9406750cbc34`**, `orders-to-fulfillment`, tier `standard`, retry 3 attempts exponential backoff, bound to `cfg_910772de96ce`, 16 approved cases attached.
+
+**THE DEBUG LOOP (the highest-value MCP evidence — a real bug, found and fixed):**
+
+1. First `testSavedWorkflow` returned **`created=0, updated=0, skipped=1, errors=0`**. The skill is explicit that all-skipped on a happy path is a FAILURE, not a pass — an HTTP 200 proves nothing.
+2. **Diagnosis from the trace:** the config review page saves every condition value as a **string** (`test equals "false"`), while Shopify sends `test: false` as a **boolean**. `fastn.evaluator` compares strictly, so `false === "false"` is false and **every genuine order was being filtered out**. A bound schedule would have silently no-op'd forever — exactly the silent-failure class Doorstep exists to surface.
+3. **Fix** via `editWorkflowCode`: build a `condView` of the record with the fields named in conditions coerced to strings, then evaluate. The saved condition keeps working as the user wrote it. The patch auto-published as version 1 and returned a **`regressionGate`** instruction (`STOP - REGRESSION GATE`, 16 cases stale).
+4. **Re-run:** **`created=1, updated=0, skipped=0, errors=0`** — row at `Fulfillment!A2:L2`, col A `7340851429664`, col B `1001`, col H `1 x Selling Plans Ski Wax`, col I `New`. **T1 passes.**
+5. **Replay:** **`created=0, updated=0, skipped=1, errors=0`**, sheet still exactly one data row. **T2 passes.**
+6. `saveWorkflowValidation` recorded **5 pass, 10 skipped with reasons, 1 partial**, overall **`partial`** — scored honestly rather than claimed green. Blockers named per case: no real checkout order, a single-line-item store, no mock stubs, and the unprovisioned callback target.
+
+- **Path B manifest:** `setWorkflowConnectorScope` flipped **shopify** and **googleSheets** to `MULTI_TENANT` (connection pins cleared, so a connection resolves per tenant).
+- **Widget:** **`wgt_d1f67a4d76b3`** ("Shopify Orders", slug `shopify-orders`, active, SINGLE_ACTIVATION), exposing all three connectors and Flow A. `listConfigs(widget_id)` came back **empty**, i.e. the config was NOT auto-linked — the skill calls an unlinked config a build failure — so `updateConfig` set `widget_id`, and the readback confirms `widgetId: wgt_d1f67a4d76b3`.
+
+**Not done at the lock:** Flow B, both triggers, and PHASE 4's verification report.
+**Screenshot:** screenshots/10-flow-a-build.png, 11-debug-loop.png, 12-widget.png (to capture)
+
+### 11 · 15:27–16:10 · A · Flow B, triggers, widget and VERIFY (A4–A6)
+**Prompt**
+> do whatever is left
+
+**MCP tools invoked:** `runWorkflowCode` ×4 (Mailjet probe, sheet seeding, cell repair), `createWorkflow`, `testSavedWorkflow` ×6, `editWorkflowCode` ×3, `saveWorkflowValidation` ×2, `setWorkflowConnectorScope` ×2, `bind_schedule_trigger`, `bind_app_trigger`, `triggerSchedulerNow`, `listWorkflowExecutions`, `updateWidget`
+
+**Result:** Flow B **`wf_a51624da9db1`** built, published, MULTI_TENANT, 9 approved cases attached.
+Both triggers bound. Widget updated to carry both flows and both triggers.
+
+**Mailjet send path probed first:** `listSender` → one Active sender; `sendEmail` → **200 `Status: success`**.
+The probe was addressed to the verified sender itself, so nothing reached a third party.
+
+**A three-step live sequence, run in order, each asserting its own outcome:**
+
+| Step | Returned | Verdict |
+|---|---|---|
+| Tracking typed in, no buyer email | `errors=1`, `errorKind: data`, step `send_buyer_email`, row NOT Notified, **one** alert email | TC-19 pass |
+| Immediate re-run | `state.get` hit the guard, **no `sendEmail` in the trace** | TC-22 pass |
+| Buyer email filled in | `updated=1, errors=0`, one buyer email (UPS + `1Z999AA10123456784` + tracking link), row → `Notified` + `notified_at` | **T4 pass** |
+| Run again | `skipped=1`, **no `sendEmail`**, `notified_at` unchanged | **T5 pass** |
+
+`create_fulfillment` was reported **skipped, not failed**, throughout (`shopifyWriteBack: false`) — TC-20 pass.
+
+**TWO MORE REAL DEFECTS FOUND AND FIXED** (on top of the boolean-condition bug in entry 10):
+
+1. **`USER_ENTERED` corrupted the buyer phone.** Writing `+92 300 1234567` stored **`#ERROR!`** — Sheets
+   parses a leading `+` as a formula. This would have silently mangled the phone on essentially every
+   international order, in the supplier's own sheet. **Fixed:** both flows now use `valueInputOption: "RAW"`.
+   Verified by re-writing the cell with RAW and reading back the literal string.
+2. **Flow A would erase the supplier's data.** Flow A rebuilds the whole row; for an order where Shopify has
+   no customer, the buyer columns compute to empty, and writing that would wipe whatever the merchant or
+   supplier had typed. **Fixed:** a guard that never replaces a filled cell with a blank. Verified — the
+   re-run returned `skipped=1` and left Sara Khan, the email, phone and address untouched.
+
+Each fix re-armed the platform's `regressionGate` (`STOP - REGRESSION GATE`) and the suite was re-run and
+re-persisted before the change was accepted.
+
+**Trigger fire-and-correlate:** `triggerSchedulerNow` → `eventId sched-evt_665adc8cf005`;
+`listWorkflowExecutions` → `exec_e356678864cd` carrying `x-fastn-event-id: sched-evt_665adc8cf005` and
+`x-fastn-trigger-id: 72d331d9-...`. **Delivery proven.** The execution stayed `status: queued` for over two
+minutes and never completed — recorded as a blocker rather than shrugged off; both flows are
+`executionTier: standard` on a free-plan org, so the `instant` tier is the first thing to try.
+
+**Validations persisted honestly:** Flow A 7 pass / 2 partial / 7 skipped-with-reason; Flow B 5 pass /
+2 partial / 2 skipped-with-reason. Overall `partial` on both. No case was marked pass on a status code.
+
+**Verification report** written to [verification-report.md](verification-report.md).
+**Screenshot:** screenshots/13-flow-b-email.png, 14-sheet-notified.png, 15-triggers.png (to capture)

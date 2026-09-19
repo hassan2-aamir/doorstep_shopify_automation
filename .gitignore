@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+# test-run screenshots are regenerated; curated evidence lives in evidence/screenshots
+app/web/test-results/

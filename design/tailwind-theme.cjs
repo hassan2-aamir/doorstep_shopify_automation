@@ -117,7 +117,7 @@ module.exports = {
     borderWidth: {
       hairline: v('primitive-borderWidth-hairline'),
       thick: v('primitive-borderWidth-thick'),
-      block: v('primitive-borderWidth-block'),
+      heavy: v('primitive-borderWidth-block'),
     },
 
     spacing: {

@@ -1,0 +1,49 @@
+@import '@design/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--primitive-fontFamily-sans);
+    -webkit-text-size-adjust: 100%;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    min-height: 100vh;
+    line-height: var(--primitive-lineHeight-normal);
+  }
+  :focus-visible {
+    outline: var(--focus-width) solid var(--focus-color);
+    outline-offset: var(--focus-offset);
+  }
+  /* Screen headings take programmatic focus on route change; they are not controls. */
+  h1[tabindex='-1']:focus {
+    outline: none;
+  }
+}
+
+@layer components {
+  .skeleton {
+    background: linear-gradient(90deg, var(--skeleton-bg) 25%, var(--skeleton-sheen) 50%, var(--skeleton-bg) 75%);
+    background-size: 200% 100%;
+    border-radius: var(--skeleton-radius);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

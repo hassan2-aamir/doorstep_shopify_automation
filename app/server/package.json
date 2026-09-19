@@ -1,0 +1,25 @@
+{
+  "name": "doorstep-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Doorstep host API: embed-token minting, Fastn workflow callback receiver, Sync health and workspace views.",
+  "engines": {
+    "node": ">=20.6"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "dev": "node --watch --env-file-if-exists=.env src/index.js",
+    "init-db": "node --env-file-if-exists=.env scripts/init-db.js",
+    "seed": "node --env-file-if-exists=.env scripts/seed.js",
+    "demo-events": "node --env-file-if-exists=.env scripts/demo-events.js",
+    "tunnel": "ngrok http 4000",
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "express": "^4.22.3",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^7.2.0",
+    "mongodb": "^6.21.0"
+  }
+}

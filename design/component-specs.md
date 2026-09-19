@@ -60,9 +60,12 @@ difference between page and block does the job a shadow would do in a non-flat s
 
 Top to bottom:
 
-1. **Verdict** in a feature block: `text-verdict` (36px, weight 800, −0.03em). "All orders are
-   moving" in `--verdict-ok-fg`, or "3 orders need attention" in `--verdict-issue-fg`. This is
-   the Vibrant "large type 32px+" rule applied to the only sentence that matters.
+1. **Verdict** in a feature block: `text-verdict` (36px, weight 800, −0.03em) in
+   `--block-feature-fg`, next to a 40px solid icon square that carries the state (emerald = all moving,
+   red = needs attention, amber = finish setup). This is the Vibrant "large type 32px+" rule applied
+   to the only sentence that matters. Don't colour the verdict text itself on the feature block:
+   emerald-800 or red-800 on indigo-900 is about 2:1. `--verdict-ok-fg` / `--verdict-issue-fg` are
+   only for a verdict set directly on `--color-background`.
 2. **Banner** if any, directly under the verdict.
 3. **Three stats** in blocks: label `--stat-label-*` (12px, bold, +0.06em tracking, uppercase)
    over value `text-stat` (48px, weight 800, tabular-nums). Three across from 768px, stacked below.

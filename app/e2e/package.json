@@ -1,0 +1,14 @@
+{
+  "name": "doorstep-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Navigation acceptance tests N1-N7 against the real server, using the locally installed Chrome/Edge.",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "dependencies": {
+    "mongodb": "^6.21.0",
+    "playwright-core": "^1.63.0"
+  }
+}

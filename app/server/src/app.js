@@ -19,6 +19,11 @@ export function createApp({ db, config, fetchImpl }) {
   const fastnOrigin = originOf(config.fastn.host);
   app.use(helmet({
     crossOriginEmbedderPolicy: false, // the Fastn widget is a cross-origin iframe
+    // Helmet defaults COOP to same-origin, which puts this page in its own browsing-context
+    // group and severs window.opener on any popup. The Fastn widget signs connectors in via a
+    // popup that reports back through window.opener, so with COOP on, that popup loses its
+    // opener and lands on about:blank instead of the provider's authorization page.
+    crossOriginOpenerPolicy: false,
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],

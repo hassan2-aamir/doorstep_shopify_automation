@@ -1,12 +1,12 @@
 ---
 name: connector_builder
 description: >-
-  Production knowledge base for building and debugging fastn connectors through the fastn Connector MCP. Covers REST, GraphQL, MCP-protocol, FTP/FTPS/SFTP, DB, gRPC, and AWS Lambda connectors; every auth strategy (OAuth2/OAuth1, API key, Basic/Digest, Bearer, JWT, AWS SigV4, INPUT, NO_AUTH); action input/output contracts and bodyTemplate rules; webhook configs and subscription code; plus platform bugs and provider-specific quirks from 20+ production connectors. Use whenever creating, editing, testing, or debugging a fastn connector, auth method, action, or webhook — e.g. "build a Stripe/Salesforce/HubSpot connector", "add an action to a connector", "wire up OAuth/API-key/AWS auth", "register a webhook", "the webhook won't subscribe", or "fix the inputContract/outputContract".
+  Production knowledge base for building and debugging fastn connectors through the fastn Connector MCP. Covers REST, GraphQL, MCP-protocol, FTP/FTPS/SFTP, DB, gRPC, and AWS Lambda connectors; every auth strategy (OAuth2/OAuth1, API key, Basic/Digest, Bearer, JWT, AWS SigV4, INPUT, NO_AUTH); action input/output contracts and bodyTemplate rules; events and webhook configs — EVENT_WEBHOOK subscription code vs APP-type manual registration with eventKey routing and requiredActions account mapping (mappedTo); plus platform bugs and provider-specific quirks from 20+ production connectors. Use whenever creating, editing, testing, or debugging a fastn connector, auth method, action, event, or webhook — e.g. "build a Stripe/Salesforce/HubSpot connector", "add an action to a connector", "wire up OAuth/API-key/AWS auth", "register a webhook", "set up connector events", "the webhook won't subscribe", "the trigger never fires", or "fix the inputContract/outputContract".
 ---
 
-<!-- fastn skill: connector_builder v1 -->
+<!-- fastn skill: connector_builder v2 -->
 
-> Step 0 - version sync (do this FIRST, every run): this file is tagged `<!-- fastn skill: connector_builder v1 -->`. Call `skill {"slugs": ["connector_builder"]}` on your fastn gateway and compare. If the published version differs, reinstall from the fresh `downloadUrl` before doing anything else.
+> Step 0 - version sync (do this FIRST, every run): this file is tagged `<!-- fastn skill: connector_builder v2 -->`. Call `skill {"slugs": ["connector_builder"]}` and compare. If the published version differs, reinstall from the fresh `downloadUrl` before doing anything else.
 
 # connector-builder
 
@@ -179,51 +179,19 @@ Key patterns:
 
 ---
 
-## 5. Webhook Config Patterns
+## 5. Events & Webhooks — read `references/events-webhooks.md`
 
-### EVENT_WEBHOOK vs APP type
-- **EVENT_WEBHOOK**: provider supports a REST registration API. Subscription code calls a connector action to register the webhook URL. Unsubscription calls a delete action.
-- **APP**: no registration API (HubSpot, Slack, Notion, Dropbox, Fireflies). Setup = paste the fastn webhook URL into the provider's app settings UI. No subscription code needed.
+**Before creating or editing ANY webhook config, read `references/events-webhooks.md`.** It holds the full model: the two types, the complete config contract, subscription-code rules, the APP inbound routing pipeline, `requiredActions` account mapping, verification schemes, provider-specific patterns, and the events definition-of-done.
 
-### The event key gotcha: `ctx.input.event` not `ctx.input.eventId`
-In webhook subscription code, the event type arrives under **`ctx.input.event`** (NOT `eventId`) — applies to all providers verified: Cin7 Core, ServiceNow, Salesforce, Dynamics 365 CRM, BigCommerce, Mailgun.
+The non-negotiables (detail and procedures in the reference):
 
-### fastn.connector.<slug>.<action>() resolver envelope
-The programmatic connector call returns `{id:'exec_*', output:{...}, success, status}`.
-- Most providers: payload at `res.output`
-- BigCommerce: payload at `res.output.data` (extra nesting)
-- Always use a safe chain: `res?.output?.data ?? res?.output ?? res`
-
-### live-only resolver
-`fastn.connector.<slug>.<action>()` inside subscription code **only sees `stage:live` actions**. Webhook management actions (createWebhook, deleteWebhook, etc.) must be promoted to live before exercising subscriptions. `stage:test` webhook mgmt actions → subscription execution fails.
-
-### HMAC verification patterns by provider
-| Provider | Header | Prefix |
-|---|---|---|
-| GitHub | `x-hub-signature-256` | `sha256=` |
-| Fireflies | `x-hub-signature` | `sha256=` |
-| Akeneo | `x-akeneo-request-signature` | stripe-style `timestamp.body` |
-| Notion | `X-Notion-Signature` | `sha256=` |
-| HubSpot | `X-HubSpot-Signature-v3` | (+ timestamp header) |
-| Mailgun | body fields: `signature.token/timestamp/signature` — use `eventsVerification.method: "NONE"` |
-
-### Slack webhook: CHALLENGE_RESPONSE
-`url_verification` — field `type`, value `url_verification`, responseField `challenge`. No HMAC (signing secret not stored separately).
-
-### Google Drive watch channels (not event webhooks)
-Drive has no classic event webhooks. Use watch channels (`watchChanges`, `watchFile`). Event key = `resourceState` (X-Goog-Resource-State). Unsubscription via `stopChannel`.
-
-### Salesforce Apex-trigger webhooks
-No native webhook API — subscription code creates a Business Rule (`sys_script`) / Apex Class + Trigger via API. Remote Site Settings must authorize the **exact fastn host** (`live.gcp.fastn.ai`). Class script must be single-line, single-quotes only.
-
-### ServiceNow Business Rule webhooks
-No native webhook API — subscription code creates a Business Rule (`sys_script`, when=after) whose script POSTs via `sn_ws.RESTMessageV2`. Script value must be single-line, single-quotes only.
-
-### Dynamics 365 CRM Dataverse webhooks
-Register `serviceendpoint` + up to 3 `sdkmessageprocessingsteps` per subscription. `subscriptionId = endpointId|stepId1|stepId2|stepId3`. OData filter for sdkmessagefilters: `_sdkmessageid_value eq <guid> and primaryobjecttypecode eq '<entity>'` — no quotes around GUID.
-
-### Dynamics 365 F&O Business Events
-No REST webhook registration API. Business Events are configured in F&O portal under System Administration → Setup → Business Events → Endpoints (HTTPS type). Use APP-type webhook config with BusinessEventId values as event keys.
+- **Two types, decide first.** `EVENT_WEBHOOK` = provider has a REST registration API; fastn registers per-trigger URLs via subscription code. `APP` = no registration API (HubSpot, Slack, Notion, Dropbox, Fireflies); the **user** pastes ONE shared fastn URL into the provider's portal, and fastn must route inbound events itself.
+- **APP routing is two-stage**: event-type match via `eventKey` (dotted payload path), then account match via `requiredActions[].mappedTo`. An APP config without `eventKey` fans out every event to every trigger; an `eventKey` that doesn't resolve in a payload silently drops that event.
+- **`requiredActions` is REQUIRED for APP whenever payloads carry an account identifier** — it is the account mapping. Shape: `{actionId, label, value, mappedTo}`. The action (a zero-input "account info" GET) runs against the user's connection at trigger creation; the `value` dotted path (authored against the `data.response.*` envelope) is stamped as the trigger's `accountId`; at ingest, only triggers whose `accountId` equals `payload[mappedTo]` fire (HubSpot `portalId`, Slack `team_id`).
+- **The #1 silent failure**: a trigger on an APP connector with `mappedTo` configured but a NULL `accountId` is created ACTIVE, looks healthy, and never fires. Check this first when "the trigger never fires".
+- **Subscription code gotchas** (EVENT_WEBHOOK): event type arrives as `ctx.input.event` (NOT `eventId`); the resolver only sees `stage:live` actions; resolver envelope is `res?.output?.data ?? res?.output ?? res`.
+- Every declared event carries a real `payloadSchema` captured from an actual delivery — it becomes `ctx.input` for the triggered workflow.
+- **TEST after EVERY create AND EVERY update — no exceptions.** A saved config proves nothing. Run the reference's §7 verification loop each time: EVENT_WEBHOOK → `execute_subscription` + upstream confirmation + one real event through to an execution; APP → resolve `eventKey` and the `requiredActions` `value` path against real data, then `send_test_app_event` and confirm `matched >= 1, dispatched >= 1` plus a negative check (wrong account / unsubscribed event → `matched: 0`). Never report an event setup as working from the save response, and never carry verification evidence forward across an update.
 
 ---
 
@@ -364,9 +332,6 @@ Responses for ~30+ actions exceed the tool result limit and are saved to a file.
 - `stopChannel` for unsubscription (channelId + resourceId from subscribe output).
 - `listApps`/`getApp` require `drive.apps.readonly` scope — add after initial OAuth connect (requires reconnect).
 
-### Notion
-- Webhook verification token arrives as one-time POST when URL is pasted in integration settings — it's the HMAC key.
-
 ---
 
 ## 10. Definition of Done Checklist (per action)
@@ -377,4 +342,8 @@ An action is complete only when all four hold:
 3. **inputReconciled** — `inputContract` is field-by-field and contains every key the working request sent (superset rule: may include additional optional fields). No opaque `body` string.
 4. **outputReconciled** — `outputContract` modeled from the real response, not a docs guess.
 
-A connector is COMPLETED only when: every spec resource has actions; every action is DONE or a justified `blocked`; zero anti-patterns (`{{input.body}}`, raw bodyType on writes, missing outputContract, untested); webhooks configured and exercised.
+A connector is COMPLETED only when: every spec resource has actions; every action is DONE or a justified `blocked`; zero anti-patterns (`{{input.body}}`, raw bodyType on writes, missing outputContract, untested); events complete per the definition-of-done in `references/events-webhooks.md` §8 (including `eventKey` + `requiredActions` mapping for APP-type configs, and the §7 verification loop run on the latest saved config).
+
+## Reference documents (load on demand)
+Open ONE only when you reach the phase that needs it - each is a local file in this skill's `references/` directory. Do NOT load them all up front.
+- `references/events-webhooks.md`

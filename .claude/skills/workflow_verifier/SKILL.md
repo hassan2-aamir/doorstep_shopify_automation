@@ -4,9 +4,9 @@ description: >-
   Verify a fastn workflow, trigger, widget, or whole use case actually works — end to end, with runtime evidence — through the fastn Workflow MCP. Runs the attached test-case suite and asserts each pass condition, fires every bound trigger and correlates the fire to a real execution (scheduler run-now, synthetic app event, webhook POST), reads back widgets/configs/installations, diagnoses failures from execution logs and traces, self-heals what it can, and always ends with a human-readable Markdown VERIFICATION REPORT (verdict, what's running, data parity, failures, blockers, coverage, cleanup, next steps). Use when asked to verify, test, QA, or health-check an existing workflow or integration ("is this working?", "verify my sync", "why didn't my trigger fire?"), after any workflow/trigger/widget/config change, and as the mandatory VERIFY phase the integration-builder skill runs after every build or update.
 ---
 
-<!-- fastn skill: workflow_verifier v2 -->
+<!-- fastn skill: workflow_verifier v6 -->
 
-> Step 0 - version sync (do this FIRST, every run): this file is tagged `<!-- fastn skill: workflow_verifier v2 -->`. Call `skill {"slugs": ["workflow_verifier"]}` on your fastn gateway and compare. If the published version differs, reinstall from the fresh `downloadUrl` before doing anything else.
+> Step 0 - version sync (do this FIRST, every run): this file is tagged `<!-- fastn skill: workflow_verifier v6 -->`. Call `skill {"slugs": ["workflow_verifier"]}` and compare. If the published version differs, reinstall from the fresh `downloadUrl` before doing anything else.
 
 # workflow-verifier
 
@@ -56,6 +56,8 @@ On any failure: diagnose from the execution's `error`/`errorCategory`/`fixSugges
 ## Persist the verdict
 
 After the suite runs, persist per-case results with `save_validation`: `{ status: pass|partial|fail, mode, results: [{ id, status, evidence, error?, fix? }] }` — evidence carries execution ids, returned counts, and read-back values. Record failures too; a stale green panel is worse than a red one.
+
+The endpoint enforces full coverage: exactly one result per attached case id, or it rejects with 400 (naming missing/unknown/duplicate ids). Skips are explicit and justified — `status: "skipped"` requires the reason in `error`, is legitimate only for hard external blockers (a live write awaiting user approval, a dead connection — never "the edit didn't touch it"), degrades the run to `partial`, and every skipped case appears in the report under BLOCKERS or FAILING as still owed.
 
 ## VERIFICATION REPORT (mandatory final output — Markdown, written for a human)
 
@@ -116,6 +118,10 @@ Rules: the verdict line is first and unhedged. Every PASS carries evidence in th
 ## Re-arm rule
 
 Any `update_workflow`, `edit_workflow_code`, config repoint or edit, `bind_*`, widget change, or connector-action change re-arms verification for every affected surface. Verifying only the changed piece is not done — the suite plus the armed-system checks for that workflow run again.
+
+**A workflow with NO attached suite is a FAIL, and the fix is to propose one.** Every workflow must have test cases — including ones built before the gate existed. When `testCases` is empty (or `lastValidation` is `null`, i.e. attached but never run), you cannot verify the flow at all: derive a suite from the deployed code, config, and bound triggers, submit it with `submit_test_cases` for the user's approval, and do it for EVERY flow of the use case that lacks one — not only the flow you were asked to verify. The report carries the verdict FAIL, the untested flows under **Blockers** with the `reviewUrl`, and — once the approved suite runs — its pre-existing failures under **Failures**. (verify-matrix §1; integration-builder `references/test-cases.md` → PRE-EXISTING FLOWS WITH NO SUITE.)
+
+**The platform enforces this and you must obey its signals.** Every code change stamps `lastValidation` with `stale: true` and the write response carries `regressionGate: { suiteStale, testCaseCount, instruction }` — a `STOP - REGRESSION GATE` directive. Treat both as blocking state: when verifying ANY workflow, check `lastValidation` first — `stale: true` (or a `ranAt` older than `updatedAt`) means the deployed code has never passed its suite, which is a **FAILING** finding until you re-run every attached case and persist a fresh `save_validation`. A green panel from before the edit proves nothing about the code that is deployed now.
 
 ## Reference documents (load on demand)
 Open ONE only when you reach the phase that needs it - each is a local file in this skill's `references/` directory. Do NOT load them all up front.

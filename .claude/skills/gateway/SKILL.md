@@ -1,10 +1,15 @@
 ---
 name: gateway
-mode: instructions
-description: Operating manual for the fastn gateway - clear its required first read, pick and install the right fastn skill, and keep the installed copy in sync with the published version. Use whenever a task touches a fastn connector, integration, workflow, sync, widget, automation, or any external app reached through fastn.
+description: >-
+  Operating manual for the fastn gateway - clear its required first read, pick and install the right fastn skill, and keep the installed copy in sync with the published version. Use whenever a task touches a fastn connector, integration, workflow, sync, widget, automation, or any external app reached through fastn.
 ---
 
-## Role
+<!-- fastn skill: gateway v12 -->
+
+> Step 0 - version sync (do this FIRST, every run): this file is tagged `<!-- fastn skill: gateway v12 -->`. Call `skill {"slugs": ["gateway"]}` and compare. If the published version differs, reinstall from the fresh `downloadUrl` before doing anything else.
+
+# gateway
+
 One governed endpoint fronting every app your organization has connected, which also serves fastn's library of skills for building integrations and running multi-tenant automations. Skills are published server-side, so discover the current set rather than assuming what exists. Auth, identity, and policy are handled by the gateway.
 
 ## The gate

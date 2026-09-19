@@ -4,6 +4,8 @@ Tracks [plan.md](plan.md). Updated as work lands.
 
 Legend: ✅ done · 🔄 in progress · ⬜ not started · 👤 needs a human (browser, account, approval, recording) · ⛔ blocked
 
+> **DECISION NEEDED (Shopify fulfillment write-back):** re-tested after the user added permissions: still 9 scopes and 403. The connection is still OAuth, so the custom-app token has not been entered under the API Key method. Options: (1) enter the token via the API Key method, (2) take the PRD fallback (sheet status + buyer email, no Shopify write-back). See evidence/prompts.md entries 05 to 07.
+>
 > **Track A unblocked (12:35):** the project `.mcp.json` server (`mcp__fastn__*`) is authenticated and
 > P0 passed in the VS Code session. Continue with P1 onward from [evidence/prompts.md](evidence/prompts.md).
 
@@ -12,11 +14,11 @@ Legend: ✅ done · 🔄 in progress · ⬜ not started · 👤 needs a human (b
 | # | Task | Owner | Status | Notes |
 |---|---|---|---|---|
 | 0.1 | `evidence/` folder (prompts log, ids, screenshots, report) | B | ✅ | Prompts P0–P6 staged; ids, test-results, report templates |
-| 0.2 | Google Sheet "Doorstep Fulfillment" / tab `Fulfillment` with 12 headers | B | 👤 | Header CSV + setup steps in [sheet/README.md](sheet/README.md) |
+| 0.2 | Google Sheet "Doorstep Fulfillment" / tab `Fulfillment` with 12 headers | B | ✅ | Sheet `16AtFOhw…6liQI`: 12 headers verified exact and in order, 0 data rows. Tab name confirmed `Fulfillment` by user; sharing tightened off "anyone with link". Saved to the app (Open in sheet) |
 | 0.3 | Shopify dev store with test products + test payment | A | ✅ | Ready per team |
-| 0.4 | Fastn Billing upgrade confirmed + one customer created, UUID noted | A | ✅ | Customer `0b55acb5-45f5-4ff1-9ba9-6fa3070becb2`; app re-seeded; real embed token minted and the Fastn widget renders in Connections ([screenshot](evidence/screenshots/app/10-connections-real-widget.png)); list is empty until A creates the "Shopify Orders" widget. Billing: free plan, 50 credits (ask mentor about the upgrade) |
+| 0.4 | Fastn Billing upgrade confirmed + one customer created, UUID noted | A | ✅ | Customer `0b55acb5-45f5-4ff1-9ba9-6fa3070becb2`; API key confirmed limited to this customer; app re-seeded; real embed token minted and the Fastn widget renders in Connections ([screenshot](evidence/screenshots/app/10-connections-real-widget.png)); list is empty until A creates the "Shopify Orders" widget. Billing: free plan, 50 credits (ask mentor about the upgrade) |
 | 0.5 | `gateway` skill, `whoami`, skill version check via MCP | A | ✅ | P0 logged as entry 01. Org `personal_c22c5878e2b772232955`, owner, env `test`. Skills current: gateway v12, integration_builder v21, workflow_verifier v6, connector_builder v2, unified_api v2. 📸 still to capture |
-| 0.6 | Shopify, Sheets, email connections ACTIVE via `get_connect_url` | A | 👤 | Next: prompt P1 (needs a browser to complete each connect link) |
+| 0.6 | Shopify, Sheets, email connections ACTIVE via `get_connect_url` | A | ✅ | All three proven with real read-only calls (entry 05): Sheets tab `Fulfillment` + 12 headers read back; Mailjet valid, sender Active; Shopify readable. **But Shopify lacks the fulfillment-order scopes (403), so Flow B cannot create a Shopify fulfillment. Decision needed, see banner** |
 | 0.7 | MongoDB with validators + indexes | B | ✅ | Local db `doorstep`; `npm run init-db` (validators + 6 indexes); demo customer seeded with a **placeholder** UUID, so re-seed with the real one |
 | 0.8 | Public tunnel + `CALLBACK_SECRET` | B | 🔄 | Secret generated in `app/server/.env`; `npm run tunnel` ready (ngrok configured). Start it when A reaches A4.1, because free ngrok URLs change on every start |
 
